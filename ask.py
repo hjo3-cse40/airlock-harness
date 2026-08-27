@@ -495,7 +495,10 @@ def generate(system, user, model, on_token=None):
         "model": model,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
-        "temperature": 0.7, "top_p": 0.8, "presence_penalty": 1.5,
+        # temp 0.0: greedy decode for a reproducible audit trail. A temperature
+        # sweep (0.0-0.7) showed identical accuracy at every setting on this
+        # corpus; 0.0 is the only fully deterministic one. See temp_sweep.py.
+        "temperature": 0.0, "top_p": 0.8, "presence_penalty": 1.5,
         "max_tokens": 1200, "stream": True,
         "stream_options": {"include_usage": True},
     }
