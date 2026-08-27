@@ -522,17 +522,19 @@ def embed_texts(texts, model, kind="search_document"):
             vecs.append([round(x / norm, 5) for x in v])
     return vecs
 
+# Generation parameters, single source of truth so every audit line can log them
+# verbatim. temp 0.0: greedy decode for a reproducible audit trail. A temperature
+# sweep (0.0-0.7) showed identical accuracy at every setting on this corpus; 0.0
+# is the only fully deterministic one. See temp_sweep.py.
+GEN = {"temperature": 0.0, "top_p": 0.8, "presence_penalty": 1.5, "max_tokens": 1200}
+
 def generate(system, user, model, on_token=None):
     """Stream the answer token by token. on_token prints as tokens arrive."""
     payload = {
         "model": model,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
-        # temp 0.0: greedy decode for a reproducible audit trail. A temperature
-        # sweep (0.0-0.7) showed identical accuracy at every setting on this
-        # corpus; 0.0 is the only fully deterministic one. See temp_sweep.py.
-        "temperature": 0.0, "top_p": 0.8, "presence_penalty": 1.5,
-        "max_tokens": 1200, "stream": True,
+        **GEN, "stream": True,
         "stream_options": {"include_usage": True},
     }
     req = urllib.request.Request(SERVER + "/chat/completions",
@@ -574,6 +576,89 @@ def verify_numbers(answer, source_text):
             warnings.append(f"UNVERIFIED NUMBER: {num}")
     return sorted(warnings)
 
+# Attribution verbs: a claim of the form "<Name> <verb>" asserts that Name is the
+# source/speaker. The check confirms Name is actually a SENDER of a cited source
+# (or owns a cited non-email document), and warns when Name appears ONLY as a
+# recipient of cited mail. That is the attribution-drift case: answering "Firm X
+# said/committed ..." from OUR outgoing mail to Firm X, where X never spoke.
+ATTR_VERBS = (r"said|stated|wrote|told|quoted|offered|proposed|committed|agreed|"
+              r"confirmed|declined|deferred|requested|charged|promised|indicated|"
+              r"noted|mentioned|responded|replied|asked|gave|set")
+STOPNAMES = {"the", "this", "that", "it", "they", "he", "she", "firm", "both",
+             "other", "none", "no", "and", "for", "our", "your", "their", "these",
+             "those", "a", "an", "we", "i", "you", "there", "here", "email"}
+
+def _name_tokens(s):
+    return {t.lower() for t in re.findall(r"[A-Za-z]{3,}", s)} - STOPNAMES
+
+def verify_attribution(answer, cited):
+    """Deterministic speaker check (dumb code, no AI). cited = [(file, heading)].
+    An email heading is 'sender -> recipient'; a non-email heading is treated as a
+    document the named party owns. Warn when an attributed name is only a recipient
+    of cited mail and neither a sender nor the owner of a cited document."""
+    senders, recipients, owners = [], [], []
+    for _file, heading in cited:
+        h = heading or ""
+        if "->" in h:
+            left, right = h.split("->", 1)
+            senders.append(left)
+            recipients.append(right)
+        else:
+            owners.append((_file or "") + " " + (heading or ""))
+    if not senders and not recipients:
+        return []                                    # no directional sources; nothing to check
+    warnings = []
+    pat = re.compile(r"\b([A-Z][\w.&'()-]*(?:\s+[A-Z][\w.&'()-]*){0,3})\s+(?:" + ATTR_VERBS + r")\b")
+    for m in pat.finditer(answer):
+        toks = _name_tokens(m.group(1))
+        if not toks:
+            continue
+        def seen_in(pool):
+            return any(any(t in p.lower() for t in toks) for p in pool)
+        if seen_in(senders) or seen_in(owners):
+            continue                                 # a real sender, or owns a cited doc
+        if seen_in(recipients):
+            warnings.append(f"UNVERIFIED ATTRIBUTION: '{m.group(1).strip()}' is only a "
+                            f"recipient in the cited sources, not a sender")
+    return sorted(set(warnings))
+
+_MODEL_META = {}
+
+def loaded_model_meta(model_id):
+    """Load-time facts LM Studio exposes on its enhanced REST API (not the OpenAI
+    endpoint): quantization, arch, publisher, loaded/max context length. Cached."""
+    if model_id in _MODEL_META:
+        return _MODEL_META[model_id]
+    meta = {}
+    try:
+        base = SERVER.rsplit("/v1", 1)[0]
+        d = json.load(urllib.request.urlopen(base + "/api/v0/models", timeout=5))
+        for m in d.get("data", []):
+            if m.get("id") == model_id:
+                meta = {k: m[k] for k in ("quantization", "arch", "publisher",
+                        "loaded_context_length", "max_context_length") if m.get(k) is not None}
+                break
+    except Exception:
+        meta = {}
+    _MODEL_META[model_id] = meta
+    return meta
+
+def run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse):
+    """Full run settings stamped into every audit line so any machine can read the
+    exact specs a run used. Load facts (quant, context length) are auto-pulled from
+    LM Studio's enhanced API. The remaining UI-only load settings (GPU layers, flash
+    attention, KV cache, concurrency, thinking) are NOT exposed by any API; drop a
+    run-config.json at the repo root with those and they merge in under 'machine'."""
+    cfg = {"chat_model": chat_model, "embedder": emb_model, "top_k": top_k,
+           "min_score": min_score, "dense_min": dense_min, "diverse": diverse, **GEN}
+    cfg.update(loaded_model_meta(chat_model))
+    try:
+        with open(os.path.join(BASE, "run-config.json"), encoding="utf-8") as f:
+            cfg["machine"] = json.load(f)
+    except (OSError, ValueError):
+        pass
+    return cfg
+
 # ---------------- ask ----------------
 
 REFUSAL = "Not in the documents."
@@ -607,7 +692,8 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
                         for s, cs, c in hits]}
     dense_ok = cos_top is not None and cos_top >= dense_min
     if not hits or (bm_top < min_score and not dense_ok):
-        audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None})
+        audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None,
+                      "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
         _log(matter, audit)
         print(REFUSAL)
         gate_msg = f"(bm25 {audit['top_score']} < gate {min_score}"
@@ -635,9 +721,11 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     if not quiet:
         print()  # end the streamed line
     warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
+    warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     audit.update({"refused": False, "answer": answer, "warnings": warnings,
                   "model": model, "latency_s": round(time.time() - t0, 1),
-                  "usage": usage})
+                  "usage": usage,
+                  "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
     _log(matter, audit)
     if not quiet:
         print("\n--- Sources ---")
@@ -750,6 +838,15 @@ def selftest(min_score):
     w = verify_numbers("The CD is 1.2 nm and the budget is 999 C",
                        "\n".join(c["text"] for c in index["chunks"]))
     check("number check flags 999, passes 1.2", w == ["UNVERIFIED NUMBER: 999"])
+    check("attribution: OK when the firm is the cited sender",
+          verify_attribution("Firm Alpha offered a discount.",
+              [("firm-alpha/email-thread.md", "2026-08-20 J. Morgan (Firm Alpha) -> TestCo")]) == [])
+    check("attribution: OK when the subject owns a cited non-email doc",
+          verify_attribution("Firm Alpha quoted 4800.",
+              [("firm-alpha/fee-proposal.md", "Fee schedule")]) == [])
+    check("attribution: WARN when the firm is only a recipient (outbound-only)",
+          verify_attribution("Firm Delta requested a retainer.",
+              [("firm-delta/email-initial.md", "2026-08-12 TestCo -> Firm Delta")]) != [])
     pptx = os.path.join(BASE, "matters", "fixtures", "docs", "grid-order.pptx")
     if os.path.exists(pptx):
         sl, _ = pptx_slides(pptx)

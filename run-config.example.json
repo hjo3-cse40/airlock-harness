@@ -1,0 +1,11 @@
+{
+  "_comment": "Per-machine load settings that the OpenAI API does NOT expose, so ask.py cannot read them automatically. Copy this file to run-config.json (git-ignored) on EACH machine and fill it in. Its contents are stamped into every audit line under config.machine, so the shared audit log records exactly what specs each run used, on either laptop.",
+  "machine": "work M5 Pro 24GB",
+  "context_length": 8192,
+  "quantization": "Q5_K_M",
+  "gpu_layers": "all (36)",
+  "flash_attention": true,
+  "kv_cache": "Q8_0",
+  "max_concurrent_predictions": 1,
+  "thinking": false
+}
