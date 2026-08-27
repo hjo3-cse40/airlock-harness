@@ -1,0 +1,40 @@
+What fee did Firm Alpha quote for a provisional filing?
+What is the Firm Alpha fixed fee for a utility application?
+What does Firm Alpha charge for an office action response?
+What is the Firm Alpha fee for a provisional-to-utility conversion?
+How many filings are planned for each year of the program?
+What is the CEO cost expectation per patent?
+Which firm declined, and why?
+When was the follow-up to Firm Delta sent?
+--only firm-alpha :: What fees were quoted?
+--only firm-bravo :: What fee was quoted for a provisional application?
+--only firm-bravo :: What did Firm Bravo say about utility filings?
+--only firm-charlie :: What fee was quoted for a provisional filing?
+--only firm-charlie :: What does the guide say about typical provisional pendency?
+--only firm-charlie :: According to the guide, what is the small-entity government fee for a provisional filing?
+--only firm-echo :: What reason did the firm give in its reply?
+--only firm-delta :: Did Firm Delta respond?
+Which firms have responded so far?
+Which firms have quoted a provisional fee, and what are the amounts?
+Has any firm priced EU filing costs?
+What are the open questions in the counsel search?
+Which firm sent a long guide document?
+What did Kim and Chang quote?
+What is the Firm Alpha hourly rate for litigation?
+What discount did Firm Bravo offer for volume filings?
+Which firm did the CEO pick?
+What are the PCT filing fees quoted by Firm Charlie?
+What retainer amount did Firm Delta request?
+Did Firm Charlie quote $4,800 for a provisional?
+What did Firm Alpha say about a volume discount?
+Is the Firm Alpha estimate $19,500 per patent or $19,500 total?
+What did Firm Bravo charge for a utility filing?
+Compare the provisional fees of Firm Alpha and Firm Bravo.
+How much money does a temporary patent application cost at Firm Alpha?
+What is the total spend estimate for the whole four-year plan?
+Which law office turned us down?
+What does Firm Alpha charge for a prior-art search?
+--only firm-charlie :: What is the average number of office actions per issued case, per the guide?
+--only firm-charlie :: What revision of the guide is this, and when was it issued?
+--only firm-charlie :: In how many countries does Firm Charlie handle annuity payments?
+What is the liability cap in the Firm Alpha engagement terms?
