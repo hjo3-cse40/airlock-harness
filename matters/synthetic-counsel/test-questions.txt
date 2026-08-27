@@ -14,8 +14,8 @@ When was the follow-up to Firm Delta sent?
 --only firm-charlie :: According to the guide, what is the small-entity government fee for a provisional filing?
 --only firm-echo :: What reason did the firm give in its reply?
 --only firm-delta :: Did Firm Delta respond?
-Which firms have responded so far?
-Which firms have quoted a provisional fee, and what are the amounts?
+--diverse --top-k 8 :: Which firms have responded so far?
+--diverse --top-k 8 :: Which firms have quoted a provisional fee, and what are the amounts?
 Has any firm priced EU filing costs?
 What are the open questions in the counsel search?
 Which firm sent a long guide document?

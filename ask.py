@@ -674,22 +674,38 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            only = None
-            if line.startswith("--only "):
-                scope, _, q = line[len("--only "):].partition("::")
-                only, line = scope.strip(), q.strip()
+            only, tk, dv = None, top_k, diverse   # per-line flags fall back to batch defaults
+            if "::" in line:
+                flagstr, _, line = line.partition("::")
+                line = line.strip()
                 if not line:
                     continue
-            lines.append((only, line))
+                toks = flagstr.split()
+                j = 0
+                while j < len(toks):
+                    t = toks[j]
+                    if t == "--only" and j + 1 < len(toks):
+                        only = toks[j + 1]; j += 2
+                    elif t == "--top-k" and j + 1 < len(toks):
+                        tk = int(toks[j + 1]); j += 2
+                    elif t == "--diverse":
+                        dv = True; j += 1
+                    else:
+                        sys.exit(f"Bad flag in questions file: {t!r} (line: {raw.strip()!r})")
+            lines.append((only, tk, dv, line))
     if not lines:
         sys.exit(f"No questions in {path}")
     t0 = time.time()
     n_ans = n_gate = n_model_ref = n_warn = n_err = pt = ct = 0
-    for i, (only, q) in enumerate(lines, 1):
-        head = f"[{i}/{len(lines)}]" + (f" (--only {only})" if only else "")
+    for i, (only, tk, dv, q) in enumerate(lines, 1):
+        notes = []
+        if only: notes.append(f"--only {only}")
+        if tk != top_k: notes.append(f"top-k {tk}")
+        if dv and not diverse: notes.append("diverse")
+        head = f"[{i}/{len(lines)}]" + (f" ({', '.join(notes)})" if notes else "")
         print(f"\n{head} {q}")
         try:
-            a = ask(matter, q, top_k, min_score, only=only, batch=tag, dense_min=dense_min, diverse=diverse)
+            a = ask(matter, q, tk, min_score, only=only, batch=tag, dense_min=dense_min, diverse=dv)
         except (urllib.error.URLError, OSError) as e:
             n_err += 1
             print(f"!!  ERROR, question skipped: {e}")
