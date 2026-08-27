@@ -742,8 +742,30 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
             print("--- Context: usage not reported by the server ---")
     return audit
 
+def machine_slug():
+    """A filesystem-safe id for THIS machine, so each machine writes its own audit
+    file and the two never git-conflict. Uses run-config.json 'machine', else the
+    hostname."""
+    name = None
+    try:
+        with open(os.path.join(BASE, "run-config.json"), encoding="utf-8") as f:
+            name = json.load(f).get("machine")
+    except (OSError, ValueError):
+        name = None
+    if not name:
+        try:
+            name = os.uname().nodename
+        except Exception:
+            name = "unknown"
+    return re.sub(r"[^a-z0-9]+", "-", str(name).lower()).strip("-") or "unknown"
+
+def audit_path(matter):
+    d = os.path.join(matter_dir(matter), "audit")
+    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, machine_slug() + ".jsonl")
+
 def _log(matter, record):
-    with open(os.path.join(matter_dir(matter), "audit.jsonl"), "a", encoding="utf-8") as f:
+    with open(audit_path(matter), "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 # ---------------- batch ----------------
@@ -814,7 +836,7 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
     print(f"questions {len(lines)} | answered {n_ans} | refused {n_gate + n_model_ref} "
           f"(gate {n_gate}, model {n_model_ref}) | number warnings {n_warn} | errors {n_err}")
     print(f"tokens: {pt:,} prompt + {ct:,} answer | elapsed {mins:.1f} min")
-    print(f"audit: matters/{matter}/audit.jsonl (lines tagged batch={tag})")
+    print(f"audit: {os.path.relpath(audit_path(matter), BASE)} (lines tagged batch={tag})")
 
 # ---------------- selftest ----------------
 
