@@ -428,9 +428,24 @@ def bm25(chunks, query, top_k, stats_chunks=None):
     scored.sort(key=lambda x: -x[0])
     return scored[:top_k]
 
-def hybrid(chunks, question, top_k, stats_chunks, emb_model):
+def source_key(chunk):
+    """Diversity bucket for a chunk. Firm docs bucket by their top-level folder
+    (firm-alpha, firm-bravo, ...). Root-level docs (e.g. context-summary.md) hold
+    several firms in separate sections, so bucket those by file + heading."""
+    f = chunk["file"]
+    if "/" in f:
+        return f.split("/", 1)[0]
+    return f + " > " + (chunk.get("heading") or "")
+
+
+def hybrid(chunks, question, top_k, stats_chunks, emb_model, diverse=False):
     """RRF-fuse BM25 and dense rankings. Returns (hits, bm_top, cos_top):
-    hits = [(bm25_score, cos_or_None, chunk)] selected by fused rank."""
+    hits = [(bm25_score, cos_or_None, chunk)] selected by fused rank.
+
+    When diverse=True, selection takes the best chunk from each source first,
+    then fills any remaining slots with the next-best chunks regardless of
+    source. This stops one source (e.g. a long guide) from eating every slot on
+    aggregate questions that must span multiple firms."""
     bm_ranked = bm25(chunks, question, len(chunks), stats_chunks=stats_chunks)
     bm_top = bm_ranked[0][0] if bm_ranked else 0.0
     bm_score = {c["id"]: s for s, c in bm_ranked}
@@ -452,7 +467,25 @@ def hybrid(chunks, question, top_k, stats_chunks, emb_model):
         for rank, cid in enumerate(sorted(cos_score, key=lambda i: -cos_score[i]), 1):
             rrf[cid] = rrf.get(cid, 0.0) + W_DENSE / (K + rank)
     by_id = {c["id"]: c for c in chunks}
-    top = sorted(rrf, key=lambda i: -rrf[i])[:top_k]
+    ranked = sorted(rrf, key=lambda i: -rrf[i])
+    if diverse:
+        picked, seen = [], set()
+        for i in ranked:                       # one best chunk per source
+            k = source_key(by_id[i])
+            if k not in seen:
+                seen.add(k)
+                picked.append(i)
+            if len(picked) >= top_k:
+                break
+        if len(picked) < top_k:                # then fill, source no longer matters
+            for i in ranked:
+                if i not in picked:
+                    picked.append(i)
+                    if len(picked) >= top_k:
+                        break
+        top = picked[:top_k]
+    else:
+        top = ranked[:top_k]
     hits = [(bm_score.get(i, 0.0), cos_score.get(i), by_id[i]) for i in top]
     return hits, bm_top, cos_top
 
@@ -545,7 +578,7 @@ def verify_numbers(answer, source_text):
 
 REFUSAL = "Not in the documents."
 
-def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, dense_min=0.5):
+def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, dense_min=0.5, diverse=False):
     index = load_index(matter)
     sk = index.get("skipped") or []
     if sk and not quiet:
@@ -561,7 +594,8 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     if not index.get("embed_model"):
         emb_model = None  # index has no vectors; stay BM25-only
     hits, bm_top, cos_top = hybrid(chunks, question, top_k,
-                                   index["chunks"] if only else None, emb_model)
+                                   index["chunks"] if only else None, emb_model,
+                                   diverse=diverse)
     hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
     audit = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter,
              "question": question, "only": only, "batch": batch,
@@ -626,7 +660,7 @@ def _log(matter, record):
 
 # ---------------- batch ----------------
 
-def batch(matter, path, top_k, min_score, dense_min=0.5):
+def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
     if not os.path.exists(path):
         alt = os.path.join(matter_dir(matter), path)
         if os.path.exists(alt):
@@ -655,7 +689,7 @@ def batch(matter, path, top_k, min_score, dense_min=0.5):
         head = f"[{i}/{len(lines)}]" + (f" (--only {only})" if only else "")
         print(f"\n{head} {q}")
         try:
-            a = ask(matter, q, top_k, min_score, only=only, batch=tag, dense_min=dense_min)
+            a = ask(matter, q, top_k, min_score, only=only, batch=tag, dense_min=dense_min, diverse=diverse)
         except (urllib.error.URLError, OSError) as e:
             n_err += 1
             print(f"!!  ERROR, question skipped: {e}")
@@ -747,6 +781,8 @@ def main():
     ap.add_argument("--only", help="restrict search to files under this subfolder, e.g. --only adibi-ip")
     ap.add_argument("--dense-min", type=float, default=0.5,
                     help="dense gate: with embeddings, a cosine above this passes even when bm25 is low (default 0.5)")
+    ap.add_argument("--diverse", action="store_true",
+                    help="take the best chunk per source before filling slots; helps aggregate questions that span multiple firms")
     ap.add_argument("what", nargs="+",
                     help='"ingest", "coverage", "selftest", or a question')
     a = ap.parse_args()
@@ -757,7 +793,7 @@ def main():
         if not a.matter: sys.exit("batch needs --matter <name>")
         parts = cmd.split(None, 1)
         if len(parts) < 2: sys.exit("usage: ask.py --matter <name> batch <questions.txt>")
-        batch(a.matter, parts[1], a.top_k, a.min_score, dense_min=a.dense_min)
+        batch(a.matter, parts[1], a.top_k, a.min_score, dense_min=a.dense_min, diverse=a.diverse)
     elif cmd == "ingest":
         if not a.matter: sys.exit("ingest needs --matter <name>")
         ingest(a.matter)
@@ -766,7 +802,7 @@ def main():
         sys.exit(coverage(a.matter))
     else:
         if not a.matter: sys.exit("asking needs --matter <name>")
-        ask(a.matter, cmd, a.top_k, a.min_score, only=a.only, dense_min=a.dense_min)
+        ask(a.matter, cmd, a.top_k, a.min_score, only=a.only, dense_min=a.dense_min, diverse=a.diverse)
 
 if __name__ == "__main__":
     main()
