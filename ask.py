@@ -9,6 +9,7 @@ Usage:
   python3 ask.py --matter patent-slw ingest
   python3 ask.py --matter patent-slw "What fee did the firm quote?"
   python3 ask.py --matter synthetic-counsel batch test-questions.txt
+  python3 ask.py --matter synthetic-counsel chat
 """
 import argparse, hashlib, json, math, os, re, sys, time, urllib.request, urllib.error
 import zipfile, tempfile, xml.etree.ElementTree as ET
@@ -770,6 +771,24 @@ def _log(matter, record):
 
 # ---------------- batch ----------------
 
+def parse_line_overrides(flagstr, only, top_k, diverse):
+    """Parse a '<flags> ::' override prefix into (only, top_k, diverse),
+    starting from the given defaults. Raises ValueError on a bad flag. Shared
+    by batch lines and chat input so the two override paths can never drift."""
+    toks = flagstr.split()
+    j = 0
+    while j < len(toks):
+        t = toks[j]
+        if t == "--only" and j + 1 < len(toks):
+            only = toks[j + 1]; j += 2
+        elif t == "--top-k" and j + 1 < len(toks):
+            top_k = int(toks[j + 1]); j += 2
+        elif t == "--diverse":
+            diverse = True; j += 1
+        else:
+            raise ValueError(f"bad flag {t!r}")
+    return only, top_k, diverse
+
 def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
     if not os.path.exists(path):
         alt = os.path.join(matter_dir(matter), path)
@@ -790,18 +809,10 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
                 line = line.strip()
                 if not line:
                     continue
-                toks = flagstr.split()
-                j = 0
-                while j < len(toks):
-                    t = toks[j]
-                    if t == "--only" and j + 1 < len(toks):
-                        only = toks[j + 1]; j += 2
-                    elif t == "--top-k" and j + 1 < len(toks):
-                        tk = int(toks[j + 1]); j += 2
-                    elif t == "--diverse":
-                        dv = True; j += 1
-                    else:
-                        sys.exit(f"Bad flag in questions file: {t!r} (line: {raw.strip()!r})")
+                try:
+                    only, tk, dv = parse_line_overrides(flagstr, only, tk, dv)
+                except ValueError as e:
+                    sys.exit(f"Bad flag in questions file: {e} (line: {raw.strip()!r})")
             lines.append((only, tk, dv, line))
     if not lines:
         sys.exit(f"No questions in {path}")
@@ -837,6 +848,114 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
           f"(gate {n_gate}, model {n_model_ref}) | number warnings {n_warn} | errors {n_err}")
     print(f"tokens: {pt:,} prompt + {ct:,} answer | elapsed {mins:.1f} min")
     print(f"audit: {os.path.relpath(audit_path(matter), BASE)} (lines tagged batch={tag})")
+
+# ---------------- chat ----------------
+
+def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
+    """Interactive REPL. Each question runs one grounded, audited ask(); the
+    pipeline is unchanged. Backslash commands change the session defaults that
+    carry to the next line. A '<flags> ::' prefix overrides a single line, via
+    the SAME parser as batch. No answer is carried between turns yet (that is
+    the next step); every turn is retrieved and gated on its own."""
+    index = load_index(matter)                       # fail fast if the matter has no index
+    files = sorted({c["file"] for c in index["chunks"]})
+
+    def show():
+        print(f"matter: {matter} | top-k {top_k} | min-score {min_score} | "
+              f"dense-min {dense_min} | only {only or '(none)'} | "
+              f"diverse {'on' if diverse else 'off'}")
+
+    HELP = (
+        "commands (a line starting with '\\' is a command, anything else is a question):\n"
+        "  \\show                print current settings\n"
+        "  \\set <key> <value>   key = top-k | min-score | dense-min\n"
+        "  \\only [folder]       limit search to a subfolder; no arg clears it\n"
+        "  \\diverse [on|off]    diverse retrieval; no arg toggles\n"
+        "  \\help                this list\n"
+        "  \\exit                leave (Ctrl-D also exits)\n"
+        "one-off override: prefix a question with '--only X --top-k N --diverse ::'")
+
+    show()
+    print("Type a question, or \\help for commands.")
+    while True:
+        try:
+            line = input("\n> ").strip()
+        except EOFError:
+            print()
+            break
+        except KeyboardInterrupt:
+            print("\n(use \\exit to quit)")
+            continue
+        if not line:
+            continue
+
+        if line.startswith("\\"):
+            parts = line[1:].split()
+            cmd = parts[0].lower() if parts else ""
+            args = parts[1:]
+            if cmd in ("exit", "quit"):
+                break
+            elif cmd == "help":
+                print(HELP)
+            elif cmd == "show":
+                show()
+            elif cmd == "only":
+                if args and not any(f.startswith(args[0]) for f in files):
+                    print(f"no indexed files under '{args[0]}/' (only unchanged)")
+                else:
+                    only = args[0] if args else None
+                    print(f"only: {only or '(none)'}")
+            elif cmd == "diverse":
+                if not args:
+                    diverse = not diverse
+                elif args[0].lower() in ("on", "true", "yes"):
+                    diverse = True
+                elif args[0].lower() in ("off", "false", "no"):
+                    diverse = False
+                else:
+                    print("usage: \\diverse [on|off]"); continue
+                print(f"diverse: {'on' if diverse else 'off'}")
+            elif cmd == "set":
+                if len(args) != 2:
+                    print("usage: \\set <top-k|min-score|dense-min> <value>"); continue
+                key, val = args[0].lower(), args[1]
+                try:
+                    if key == "top-k":
+                        top_k = int(val)
+                    elif key == "min-score":
+                        min_score = float(val)
+                    elif key == "dense-min":
+                        dense_min = float(val)
+                    else:
+                        print(f"unknown key {key!r} (top-k | min-score | dense-min)"); continue
+                except ValueError:
+                    print(f"bad value {val!r} for {key}"); continue
+                show()
+            else:
+                print(f"unknown command '\\{cmd}' (try \\help)")
+            continue
+
+        q_only, q_tk, q_dv = only, top_k, diverse       # one-off override, shared with batch
+        if "::" in line:
+            flagstr, _, line = line.partition("::")
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                q_only, q_tk, q_dv = parse_line_overrides(flagstr, only, top_k, diverse)
+            except ValueError as e:
+                print(f"bad flag: {e}"); continue
+
+        try:
+            ask(matter, line, q_tk, min_score, only=q_only, batch="chat",
+                dense_min=dense_min, diverse=q_dv)
+        except KeyboardInterrupt:
+            print("\n(interrupted)")
+        except SystemExit as e:                          # ask() exits on server-down / bad --only; keep the REPL alive
+            if e.code:
+                print(f"!!  {e.code}")
+        except (urllib.error.URLError, OSError) as e:
+            print(f"!!  ERROR: {e}")
 
 # ---------------- selftest ----------------
 
@@ -919,7 +1038,7 @@ def main():
     ap.add_argument("--diverse", action="store_true",
                     help="take the best chunk per source before filling slots; helps aggregate questions that span multiple firms")
     ap.add_argument("what", nargs="+",
-                    help='"ingest", "coverage", "selftest", or a question')
+                    help='"ingest", "coverage", "selftest", "chat", or a question')
     a = ap.parse_args()
     cmd = " ".join(a.what)
     if cmd == "selftest":
@@ -935,6 +1054,9 @@ def main():
     elif cmd == "coverage":
         if not a.matter: sys.exit("coverage needs --matter <name>")
         sys.exit(coverage(a.matter))
+    elif cmd == "chat":
+        if not a.matter: sys.exit("chat needs --matter <name>")
+        chat(a.matter, a.top_k, a.min_score, only=a.only, dense_min=a.dense_min, diverse=a.diverse)
     else:
         if not a.matter: sys.exit("asking needs --matter <name>")
         ask(a.matter, cmd, a.top_k, a.min_score, only=a.only, dense_min=a.dense_min, diverse=a.diverse)
