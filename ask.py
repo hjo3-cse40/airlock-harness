@@ -664,6 +664,17 @@ def run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse):
 
 REFUSAL = "Not in the documents."
 
+def is_refusal_text(ans):
+    """True when the answer is a refusal, whether the refusal phrase leads or
+    trails the text (a trailing citation like [S2] is ignored). Small models
+    often reason first and refuse at the end, so a start-only check undercounts
+    refusals in the batch summary."""
+    t = ans.strip().lower().replace("*", "").replace("_", "")
+    t = re.sub(r"\[s\d+\]", "", t)          # drop citation labels
+    t = t.strip().rstrip(" .")
+    phrases = ("not in the documents", "not specified in the sources")
+    return any(t.startswith(p) or t.endswith(p) for p in phrases)
+
 def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, dense_min=0.5, diverse=False):
     index = load_index(matter)
     sk = index.get("skipped") or []
@@ -841,7 +852,7 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
         ans = (a.get("answer") or "").strip()
         if a.get("refused"):
             n_gate += 1
-        elif ans == REFUSAL or ans.startswith("Not specified in the sources"):
+        elif is_refusal_text(ans):
             n_model_ref += 1
         else:
             n_ans += 1
@@ -1036,6 +1047,16 @@ def selftest(min_score):
           _raises_valueerror(lambda: parse_line_overrides("--nope", None, 5, False)))
     check("override parser: --only without a value raises",
           _raises_valueerror(lambda: parse_line_overrides("--only", None, 5, False)))
+
+    # batch scorer: refusal detected whether the phrase leads or trails
+    check("scorer: refusal at the end of a reasoned answer",
+          is_refusal_text("The retainer is not a fee. Therefore, **Not specified in the sources**."))
+    check("scorer: refusal at the start",
+          is_refusal_text("Not specified in the sources. [S1] mentions a retainer."))
+    check("scorer: refusal at the end despite a trailing citation",
+          is_refusal_text("- Bravo quotes after review [S1].\n- Not specified in the sources [S2]."))
+    check("scorer: a real answer is not a refusal",
+          not is_refusal_text("Firm Alpha quoted $4,800 [S1]."))
 
     model, emb = server_models()
     if model:

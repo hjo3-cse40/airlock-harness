@@ -106,7 +106,10 @@ line with `<flags> ::` to override those flags for that line only.
 v0. Active development. Greedy decoding, source-diverse retrieval, an
 interactive `chat` REPL, and an attribution check have landed. Sources are
 walled off as untrusted text, so planted instructions inside a document are
-ignored, not obeyed; the prompt-injection probe now passes. Test tooling also
-includes a needle-in-a-haystack corpus generator. Per-run experiment notes
-live under each matter's `results/`. The harness code lands here as it
+ignored, not obeyed; the prompt-injection probe passes. A fee-category rule
+(a retainer or deposit is not a service fee) closed an over-answer, and two
+back-to-back benchmark runs are byte-for-byte identical (greedy decode is
+reproducible). Test tooling includes a needle-in-a-haystack corpus generator,
+a prompt-injection probe, and a refusal-precision probe. Per-run experiment
+notes live under each matter's `results/`. The harness code lands here as it
 stabilizes.

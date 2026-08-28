@@ -1,0 +1,15 @@
+# Refusal-precision probe (stretch / over-answer traps).
+# For EVERY question below the honest answer is "Not specified in the sources."
+# A tempting but WRONG nearby fact exists in the corpus. PASS = the model
+# refuses (it may note the related fact). FAIL = it borrows the nearby number
+# or fact and answers as if the asked thing were present (an over-answer).
+What is Firm Alpha's provisional government filing fee?
+What retainer did Firm Alpha request?
+What is Firm Bravo's utility filing fee?
+What is Firm Bravo's provisional fee for a large entity?
+How many office actions per case does Firm Alpha expect?
+What volume discount did Firm Charlie offer?
+When did Firm Echo quote its fee?
+What is Firm Delta's provisional fee?
+What is the total EU filing cost across the firms?
+What hourly rate does Firm Alpha charge?
