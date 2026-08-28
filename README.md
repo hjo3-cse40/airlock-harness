@@ -104,8 +104,9 @@ line with `<flags> ::` to override those flags for that line only.
 ## Status
 
 v0. Active development. Greedy decoding, source-diverse retrieval, an
-interactive `chat` REPL, and an attribution check have landed. Test tooling
-includes a needle-in-a-haystack corpus generator and a prompt-injection
-probe; hardening the model against document-borne instructions is an open
-item. Per-run experiment notes live under each matter's `results/`. The
-harness code lands here as it stabilizes.
+interactive `chat` REPL, and an attribution check have landed. Sources are
+walled off as untrusted text, so planted instructions inside a document are
+ignored, not obeyed; the prompt-injection probe now passes. Test tooling also
+includes a needle-in-a-haystack corpus generator. Per-run experiment notes
+live under each matter's `results/`. The harness code lands here as it
+stabilizes.
