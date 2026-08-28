@@ -27,10 +27,14 @@ Each question runs through a fixed pipeline:
    via any OpenAI-compatible local server (built against LM Studio). Decoding
    is greedy (temperature 0), so identical questions give identical answers
    and the audit trail is reproducible.
-4. **Deterministic checks.** Any number in the answer that does not appear
-   in a cited source is flagged `UNVERIFIED NUMBER`. No LLM judges.
-5. **Audit log.** Every question, score, refusal, and token count is
-   appended to a JSONL audit trail.
+4. **Deterministic checks.** Any number in the answer that is not in a cited
+   source is flagged `UNVERIFIED NUMBER`. Any claim that attributes a
+   statement to a party who is only a recipient of the cited sources, not a
+   sender or the author, is flagged `UNVERIFIED ATTRIBUTION`. Dumb code, no
+   LLM judges.
+5. **Audit log.** Every question, score, refusal, warning, and token count is
+   appended to a per-machine JSONL audit trail, so two machines that share a
+   matter never conflict.
 
 ## Design principles
 
@@ -61,6 +65,7 @@ matter boundary: not retrieval, not the index, not the audit log.
     airlock/
     ├── ask.py                 # the entire harness
     ├── prompt.txt             # grounding rules for the model
+    ├── make_haystack.py       # generate a needle-in-a-haystack test corpus
     └── matters/
         ├── fixtures/          # selftest corpus
         └── example-matter/
@@ -69,7 +74,9 @@ matter boundary: not retrieval, not the index, not the audit log.
             │   ├── bravo/
             │   └── collateral/  # reference material, kept out of scoped asks
             ├── index.json     # chunk index built by ingest
-            └── audit.jsonl    # append-only log of every question and refusal
+            ├── results/       # per-run experiment notes
+            └── audit/
+                └── <machine>.jsonl  # per-machine append-only log
 
 ## Usage
 
@@ -78,14 +85,27 @@ matter boundary: not retrieval, not the index, not the audit log.
     python ask.py --matter <name> coverage
     python ask.py --matter <name> "your question"
     python ask.py --matter <name> batch questions.txt
+    python ask.py --matter <name> chat
+
+`chat` is an interactive prompt: one grounded, audited answer per line, with
+session settings held between lines. Backslash commands change those settings
+(`\show`, `\set`, `\only`, `\diverse`, `\help`, `\exit`).
+
+Documents are read from `.md`, `.txt`, and `.pptx` natively. Other formats
+(`.pdf`, `.docx`, ...) are indexed only when a same-stem `.txt` sits beside
+them, and `coverage` warns about any file left out.
 
 Useful flags: `--only <folder>` to scope retrieval, `--top-k`,
 `--min-score` (BM25 gate), `--dense-min` (cosine gate), `--diverse`
 (one best chunk per source, then fill; pair with a larger `--top-k` for
-questions that span many sources).
+questions that span many sources). In `batch` and `chat`, prefix a single
+line with `<flags> ::` to override those flags for that line only.
 
 ## Status
 
-v0. Active development. Greedy decoding and source-diverse retrieval have
-landed; per-run experiment notes live under each matter's `results/`. The
+v0. Active development. Greedy decoding, source-diverse retrieval, an
+interactive `chat` REPL, and an attribution check have landed. Test tooling
+includes a needle-in-a-haystack corpus generator and a prompt-injection
+probe; hardening the model against document-borne instructions is an open
+item. Per-run experiment notes live under each matter's `results/`. The
 harness code lands here as it stabilizes.
