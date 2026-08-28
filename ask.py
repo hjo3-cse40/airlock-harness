@@ -1013,6 +1013,23 @@ def selftest(min_score):
         check("coverage treats a .pdf with a .txt companion as covered",
               "paired.txt" in idxable and "paired.pdf" not in idxable)
 
+    # chat/batch shared override parser (pure, no model call)
+    check("override parser: full flags parse",
+          parse_line_overrides("--only firm-x --top-k 8 --diverse", None, 5, False)
+          == ("firm-x", 8, True))
+    check("override parser: empty prefix keeps the defaults",
+          parse_line_overrides("", "keep", 3, True) == ("keep", 3, True))
+    def _raises_valueerror(fn):
+        try:
+            fn()
+        except ValueError:
+            return True
+        return False
+    check("override parser: unknown flag raises",
+          _raises_valueerror(lambda: parse_line_overrides("--nope", None, 5, False)))
+    check("override parser: --only without a value raises",
+          _raises_valueerror(lambda: parse_line_overrides("--only", None, 5, False)))
+
     model, emb = server_models()
     if model:
         print(f"\nLM Studio server up (model: {model}, embeddings: {emb or 'none'}). Live test:")
