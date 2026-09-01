@@ -1,7 +1,8 @@
 # Airlock
 
-An air-gapped, cite-or-refuse Q&A harness for sensitive documents, running
-entirely on local language models. No cloud, no telemetry, no network calls.
+An air-gapped, cite-or-refuse Q&A and summarization harness for sensitive
+documents, running entirely on local language models. No cloud, no telemetry,
+no network calls.
 
 ## The problem
 
@@ -9,32 +10,40 @@ Small local models fail silently. When retrieval is weak, when context is
 truncated, or when the model simply does not know, the output is still fluent
 and confident. The user gets a wrong answer and no error signal.
 
-Airlock is built around one contract: **cite a source or refuse.**
-When the system cannot ground an answer, it goes silent instead of guessing.
+Airlock is built around one contract: **cite a source or refuse.** When the
+system cannot ground an answer, it goes silent instead of guessing.
+
+## Two modes
+
+- **Ask (extract).** One question, one retrieval, one grounded answer, or a
+  refusal. This is the validated core.
+- **Summarize (compose).** A two-stage summary: first gather the matter's own
+  chunks as numbered, cited sources, then compose bullets from only those. Every
+  bullet carries a citation, and the same deterministic checks run over the
+  result. Summarizing is a separate, clearly lower-trust mode, because composed
+  prose can still drop a condition or add a qualifier that no check catches.
 
 ## How it works
 
 Each question runs through a fixed pipeline:
 
 1. **Hybrid retrieval.** BM25 plus a small dense embedder, fused with
-   reciprocal rank fusion. Falls back gracefully to BM25-only when no
-   embedding model is loaded. `--diverse` takes the best chunk per source
-   before filling slots, so questions that span several sources do not lose a
-   source to another source's chunks.
+   reciprocal rank fusion. Falls back to BM25-only when no embedding model is
+   loaded. `--diverse` takes the best chunk per source before filling slots.
 2. **Refusal gate.** If neither retrieval signal clears its threshold, the
    harness refuses before the model is ever called.
-3. **Grounded generation.** The model answers from numbered source chunks
-   via any OpenAI-compatible local server (built against LM Studio). Decoding
-   is greedy (temperature 0), so identical questions give identical answers
-   and the audit trail is reproducible.
-4. **Deterministic checks.** Any number in the answer that is not in a cited
-   source is flagged `UNVERIFIED NUMBER`. Any claim that attributes a
-   statement to a party who is only a recipient of the cited sources, not a
-   sender or the author, is flagged `UNVERIFIED ATTRIBUTION`. Dumb code, no
-   LLM judges.
+3. **Grounded generation.** The model answers from numbered source chunks via
+   any OpenAI-compatible local server (built against LM Studio). Decoding is
+   greedy (temperature 0), so identical inputs give identical outputs and the
+   audit trail is reproducible.
+4. **Deterministic checks.** A number not in a cited source is flagged
+   `UNVERIFIED NUMBER`. A statement attributed to a party who is only a
+   recipient of the cited sources is flagged `UNVERIFIED ATTRIBUTION`. In a
+   summary, a bullet with no citation is flagged `UNGROUNDED SENTENCE`. Dumb
+   code, no LLM judges.
 5. **Audit log.** Every question, score, refusal, warning, and token count is
-   appended to a per-machine JSONL audit trail, so two machines that share a
-   matter never conflict.
+   appended to a per-machine JSONL trail, so two machines that share a matter
+   never conflict.
 
 ## Design principles
 
@@ -42,29 +51,33 @@ Each question runs through a fixed pipeline:
 - **Jobs, not chat.** One question, one retrieval, one model call.
 - **Refusals are measured.** A refusal rate means nothing without the
   false-refusal rate next to it.
-- **Coverage is checked.** A file that never got indexed is a silent
-  failure too. `coverage` diffs the document folder against the index
-  and warns loudly.
-- **Reproducible by default.** Greedy decoding means a benchmark run can be
-  rerun and compared without sampling noise.
-- **No real data in this repo. Ever.** Only synthetic corpora and results
-  computed on synthetic corpora are published here.
+- **Coverage is checked.** A file that never got indexed is a silent failure.
+  `coverage` diffs the document folder against the index and warns loudly.
+- **Reproducible by default.** Greedy decoding lets a run be rerun and compared
+  without sampling noise.
+- **No real data in this repo. Ever.** Only synthetic corpora and synthetic
+  results are published here.
 
-## Benchmark
+## Benchmarks
 
-On a synthetic 40-question benchmark with fully known ground truth,
-accuracy improved from 45% to ~90% across six harness iterations, with
-zero fabricated numbers and zero wrong citations in every run. Under
-overload, the system degrades to silence. It does not lie.
+- **Extraction.** On a synthetic 40-question set with known ground truth,
+  accuracy improved from 45% to ~98% across harness iterations, with zero
+  fabricated numbers and zero wrong citations in every run. Under overload the
+  system degrades to silence, not to lies.
+- **Summarization.** A separate faithfulness eval scores each summary for
+  grounding rate, fabricated numbers (found nowhere in the corpus), and
+  attribution errors. Across four scopes: 98 cited claims, 100% grounded, zero
+  fabricated, zero attribution errors, and byte-identical across temp-0 runs.
 
 ## Layout
 
-Documents are organized into isolated "matters". Nothing crosses a
-matter boundary: not retrieval, not the index, not the audit log.
+Documents are organized into isolated "matters". Nothing crosses a matter
+boundary: not retrieval, not the index, not the audit log.
 
     airlock/
     ├── ask.py                 # the entire harness
     ├── prompt.txt             # grounding rules for the model
+    ├── eval_summary.py        # faithfulness eval for the summarize mode
     ├── make_haystack.py       # generate a needle-in-a-haystack test corpus
     └── matters/
         ├── fixtures/          # selftest corpus
@@ -86,30 +99,30 @@ matter boundary: not retrieval, not the index, not the audit log.
     python ask.py --matter <name> "your question"
     python ask.py --matter <name> batch questions.txt
     python ask.py --matter <name> chat
+    python ask.py --matter <name> summarize [--only <folder>] [--out file.md]
 
 `chat` is an interactive prompt: one grounded, audited answer per line, with
-session settings held between lines. Backslash commands change those settings
-(`\show`, `\set`, `\only`, `\diverse`, `\help`, `\exit`).
+session settings held between lines (`\show`, `\set`, `\only`, `\diverse`,
+`\help`, `\exit`).
+
+`summarize` gathers a matter (or one scoped folder) into cited bullets. A whole
+deck or correspondence set fits in a single pass; a larger matter is summarized
+from a diverse subset and the coverage gap is reported, never hidden.
 
 Documents are read from `.md`, `.txt`, and `.pptx` natively. Other formats
 (`.pdf`, `.docx`, ...) are indexed only when a same-stem `.txt` sits beside
 them, and `coverage` warns about any file left out.
 
-Useful flags: `--only <folder>` to scope retrieval, `--top-k`,
-`--min-score` (BM25 gate), `--dense-min` (cosine gate), `--diverse`
-(one best chunk per source, then fill; pair with a larger `--top-k` for
-questions that span many sources). In `batch` and `chat`, prefix a single
-line with `<flags> ::` to override those flags for that line only.
+Useful flags: `--only <folder>`, `--top-k`, `--min-score` (BM25 gate),
+`--dense-min` (cosine gate), `--diverse`. In `batch` and `chat`, prefix a line
+with `<flags> ::` to override for that line only.
 
 ## Status
 
-v0. Active development. Greedy decoding, source-diverse retrieval, an
-interactive `chat` REPL, and an attribution check have landed. Sources are
-walled off as untrusted text, so planted instructions inside a document are
-ignored, not obeyed; the prompt-injection probe passes. A fee-category rule
-(a retainer or deposit is not a service fee) closed an over-answer, and two
-back-to-back benchmark runs are byte-for-byte identical (greedy decode is
-reproducible). Test tooling includes a needle-in-a-haystack corpus generator,
-a prompt-injection probe, and a refusal-precision probe. Per-run experiment
-notes live under each matter's `results/`. The harness code lands here as it
-stabilizes.
+v0, active development. Greedy decoding, source-diverse retrieval, an
+interactive `chat` REPL, an attribution check, and a two-stage `summarize` mode
+with a grounding check have landed. Sources are walled off as untrusted text, so
+planted instructions inside a document are ignored, not obeyed. selftest runs 27
+checks. Test tooling includes a needle-in-a-haystack generator, a
+prompt-injection probe, a refusal-precision probe, and the summarization
+faithfulness eval. Per-run notes live under each matter's `results/`.
