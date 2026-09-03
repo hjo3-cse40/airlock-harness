@@ -1186,10 +1186,11 @@ def truncation_warning(meta, gen=None):
         return None
     n = (gen or REASON_GEN)["max_tokens"]
     return (f"TRUNCATED: the model hit the {n:,}-token limit while thinking; the answer "
-            f"may be cut or empty. Ask a narrower question, or raise max_tokens.")
+            f"may be cut or empty. Ask a narrower question, or raise it with /set think-budget "
+            f"(--think-budget on the CLI).")
 
 def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=None,
-           dense_min=0.5, diverse=True, show_thinking=False, head=True):
+           dense_min=0.5, diverse=True, show_thinking=False, head=True, think_budget=None):
     """Same retrieval and gate as ask(), a different contract with the model:
     reason-prompt.txt lets it compute and compare over the cited facts, every
     conclusion is labeled [INFERENCE], and the model thinks first (thinking on,
@@ -1223,8 +1224,9 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
              "chunks": [{"id": c["id"], "heading": c["heading"], "score": round(s, 3),
                          "cos": round(cs, 3) if cs is not None else None}
                         for s, cs, c in hits]}
+    gen = {**REASON_GEN, "max_tokens": think_budget or REASON_GEN["max_tokens"]}
     config = {**run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse),
-              **REASON_GEN, "thinking": True}
+              **gen, "thinking": True}
     dense_ok = cos_top is not None and cos_top >= dense_min
     if not hits or (bm_top < min_score and not dense_ok):
         audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None,
@@ -1280,7 +1282,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
             sys.stdout.write(t)
             sys.stdout.flush()
     answer, usage, meta = generate(system, user, chat_model, on_token,
-                                   gen=REASON_GEN, thinking=True, on_think=on_think)
+                                   gen=gen, thinking=True, on_think=on_think)
     if not quiet:
         if not answer and count[0]:          # the trace ended without an answer (loop, cap)
             if show_thinking:
@@ -1291,7 +1293,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
     warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     warnings += verify_inference_labels(answer)
-    tw = truncation_warning(meta)
+    tw = truncation_warning(meta, gen)
     if tw:
         warnings.append(tw)
     if not answer and not tw:
@@ -1439,7 +1441,7 @@ CHAT_COMMANDS = [
     ("reingest", "",               "convert new files, rebuild the index, show coverage",    None),
     ("reason",   "<question>",     "think, compute and compare over the sources; conclusions are labeled [INFERENCE]", None),
     ("think",    "[on|off]",       "show the /reason thinking trace in gray as it streams; no value toggles", None),
-    ("set",      "<key> <value>",  "top-k | min-score | dense-min",                          "keys"),
+    ("set",      "<key> <value>",  "top-k | min-score | dense-min | think-budget",           "keys"),
     ("diverse",  "[on|off]",       "diverse retrieval; no value toggles",                    None),
     ("show",     "",               "print the current settings",                             None),
     ("help",     "",               "list these commands",                                    None),
@@ -1486,6 +1488,9 @@ def _wrap_cells(text, w):
     when one is available (East-Asian width aware)."""
     rows, cur, cw = [], "", 0
     for ch in text:
+        if ch == "\n":
+            rows.append(cur); cur, cw = "", 0
+            continue
         cc = _width(ch)
         if cw + cc > w:
             cut = cur.rfind(" ")
@@ -1584,12 +1589,25 @@ def _folder_note(indexed, skipped, new):
         parts.append(f"{new} new (run /reingest)")
     return ", ".join(parts)
 
+def _hist_encode(line):
+    return line.replace("\\", "\\\\").replace("\n", "\\n")
+
+def _hist_decode(text):
+    out, i = [], 0
+    while i < len(text):
+        if text[i] == "\\" and i + 1 < len(text):
+            out.append("\n" if text[i + 1] == "n" else text[i + 1]); i += 2
+        else:
+            out.append(text[i]); i += 1
+    return "".join(out)
+
 def load_history(matter):
+    """One entry per file line; a multi-line entry is stored with escaped newlines."""
     p = os.path.join(matter_dir(matter), "audit", HISTORY_FILE)
     if not os.path.exists(p):
         return []
     with open(p, encoding="utf-8") as f:
-        return [l.rstrip("\n") for l in f if l.strip()][-HISTORY_MAX:]
+        return [_hist_decode(l.rstrip("\n")) for l in f if l.strip()][-HISTORY_MAX:]
 
 def append_history(matter, line):
     d = os.path.join(matter_dir(matter), "audit")
@@ -1600,7 +1618,7 @@ def append_history(matter, line):
         return
     lines.append(line)
     with open(p, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines[-HISTORY_MAX:]) + "\n")
+        f.write("\n".join(_hist_encode(l) for l in lines[-HISTORY_MAX:]) + "\n")
 
 class ChatState:
     """One chat session. scope=None means the whole matter."""
@@ -1608,6 +1626,7 @@ class ChatState:
         self.matter, self.top_k, self.min_score = matter, top_k, min_score
         self.scope, self.dense_min, self.diverse = only, dense_min, diverse
         self.show_thinking = False           # /think: stream the reason-mode trace in gray
+        self.think_budget = REASON_GEN["max_tokens"]   # /set think-budget: reason-mode max_tokens
         self.index, self.files = None, []
         self.load()
 
@@ -1625,12 +1644,12 @@ class ChatState:
         return (f"matter: {self.matter} | scope: {self.scope or 'whole matter'} | "
                 f"top-k {self.top_k} | min-score {self.min_score} | dense-min {self.dense_min} | "
                 f"diverse {'on' if self.diverse else 'off'} | "
-                f"think {'on' if self.show_thinking else 'off'}")
+                f"think {'on' if self.show_thinking else 'off'} | think-budget {self.think_budget:,}")
 
 def erase_typed_rows(prompt, line):
     """Move up over the rows the submitted line took and clear them, so the
     question band replaces the typed line instead of repeating it."""
-    rows = max(1, (_width(prompt + line) - 1) // term_width() + 1)
+    rows = len(_layout(prompt, line, term_width())[0])
     sys.stdout.write(f"\x1b[{rows}A\r\x1b[J")
     sys.stdout.flush()
 
@@ -1656,7 +1675,7 @@ def chat_command(state, line, erase=None):
         try:
             reason(state.matter, arg, state.top_k, state.min_score, only=state.scope,
                    batch="chat", dense_min=state.dense_min, diverse=True,
-                   show_thinking=state.show_thinking)
+                   show_thinking=state.show_thinking, think_budget=state.think_budget)
         except SystemExit as e:
             return True, f"!!  {e.code}" if e.code else ""
         except (urllib.error.URLError, OSError) as e:
@@ -1713,7 +1732,7 @@ def chat_command(state, line, erase=None):
     if cmd == "set":
         parts = arg.split()
         if len(parts) != 2:
-            return True, "usage: /set <top-k|min-score|dense-min> <value>"
+            return True, "usage: /set <top-k|min-score|dense-min|think-budget> <value>"
         key, val = parts[0].lower(), parts[1]
         try:
             if key == "top-k":
@@ -1722,8 +1741,13 @@ def chat_command(state, line, erase=None):
                 state.min_score = float(val)
             elif key == "dense-min":
                 state.dense_min = float(val)
+            elif key == "think-budget":
+                n = int(val.replace(",", ""))
+                if not 500 <= n <= 24000:
+                    return True, "think-budget must be between 500 and 24000 tokens (the answer shares it with the thinking)"
+                state.think_budget = n
             else:
-                return True, f"unknown key {key!r} (top-k | min-score | dense-min)"
+                return True, f"unknown key {key!r} (top-k | min-score | dense-min | think-budget)"
         except ValueError:
             return True, f"bad value {val!r} for {key}"
         return True, state.show()
@@ -1779,7 +1803,7 @@ def chat_menu(buffer, state):
                 for m in matters_list() if m.lower().startswith(arg)]
     if spec[3] == "keys":
         keys = (("top-k", str(state.top_k)), ("min-score", str(state.min_score)),
-                ("dense-min", str(state.dense_min)))
+                ("dense-min", str(state.dense_min)), ("think-budget", str(state.think_budget)))
         return [(f"/{cmd} {k} <value>", f"/{cmd} {k} ", f"now {v}")
                 for k, v in keys if k.startswith(arg.split()[0] if arg else "")]
     return []
@@ -1801,19 +1825,71 @@ def _clip(s, w):
         used += cw
     return "".join(out)
 
+# Modified arrows follow xterm: ESC [ 1 ; <mod> <key>, mod = 1 + shift(1) + alt(2) + ctrl(4) + meta(8).
+# Shift extends a selection, alt/ctrl jump words, meta (cmd in xterm.js) jumps to the line ends.
 _KEY_SEQ = {"[A": "up", "OA": "up", "[B": "down", "OB": "down", "[C": "right", "OC": "right",
             "[D": "left", "OD": "left", "[H": "home", "OH": "home", "[1~": "home", "[7~": "home",
             "[F": "end", "OF": "end", "[4~": "end", "[8~": "end", "[3~": "del", "[Z": "backtab",
-            "b": "word-left", "f": "word-right", "[1;5D": "word-left", "[1;5C": "word-right"}
+            "b": "word-left", "f": "word-right", "\r": "newline", "\n": "newline",
+            "a": "select-all", "c": "copy",
+            "[1;5D": "word-left", "[1;5C": "word-right", "[1;3D": "word-left", "[1;3C": "word-right",
+            "[1;9D": "home", "[1;9C": "end",
+            "[1;2D": "sel-left", "[1;2C": "sel-right", "[1;2H": "sel-home", "[1;2F": "sel-end",
+            "[1;2A": "sel-home", "[1;2B": "sel-end",
+            "[1;4D": "sel-word-left", "[1;4C": "sel-word-right",
+            "[1;6D": "sel-word-left", "[1;6C": "sel-word-right",
+            "[1;10D": "sel-home", "[1;10C": "sel-end", "[1;10A": "sel-home", "[1;10B": "sel-end"}
 _KEY_CTRL = {1: "home", 2: "left", 4: "eof", 5: "end", 6: "right", 11: "kill-end", 12: "clear",
              14: "down", 16: "up", 21: "kill-line", 23: "kill-word", 3: "intr", 9: "tab",
              13: "enter", 10: "enter", 8: "bs", 127: "bs"}
+
+def _layout_marked(prompt, buf, cols):
+    """_layout for a buffer carrying zero-width \\x00/\\x01 selection markers."""
+    rows, cur, col = [], "", 0
+    for ch in prompt + buf:
+        if ch in "\x00\x01":
+            cur += ch; continue
+        if ch == "\n":
+            rows.append(cur); cur, col = "", 0
+            continue
+        w = _width(ch)
+        if col + w > cols:
+            rows.append(cur); cur, col = "", 0
+        cur += ch; col += w
+    rows.append(cur)
+    return rows
+
+def _layout(prompt, buf, cols, pos=None):
+    """Visual rows of prompt+buf: a newline in buf starts a row, and a row
+    wraps at cols cells. Returns (rows, crow, ccol): the row strings and the
+    cursor's row/column for buffer offset pos (end of text when pos is None).
+    The prompt is on the first row only."""
+    rows, cur, col = [], "", 0
+    crow = ccol = None
+    text = prompt + buf
+    cpos = len(prompt) + (len(buf) if pos is None else pos)
+    for i, ch in enumerate(text):
+        if i == cpos:
+            crow, ccol = len(rows), col
+        if ch == "\n":
+            rows.append(cur); cur, col = "", 0
+            continue
+        w = _width(ch)
+        if col + w > cols:
+            rows.append(cur); cur, col = "", 0
+        cur += ch; col += w
+    rows.append(cur)
+    if crow is None:
+        crow, ccol = len(rows) - 1, col
+    return rows, crow, ccol
 
 class LineEditor:
     """Minimal raw-mode line editor. Up/down walk history; while the buffer
     starts with '/' a menu is drawn ABOVE the prompt and up/down move its
     highlight, tab fills the row, enter runs it, esc closes it. Bracketed
-    paste folds a multi-line paste into one line. Keys and output are
+    paste keeps its lines. Option-Enter inserts a newline (the buffer may
+    span rows); shift-modified arrows select, typing replaces the selection,
+    Option-A selects all, Option-C copies the selection. Keys and output are
     injectable so selftest can drive it without a terminal."""
 
     def __init__(self, menu_fn, history=None, keys=None, out=None, width=None):
@@ -1826,6 +1902,8 @@ class LineEditor:
         self.hist_i, self.stash = None, ""
         self.sel, self.view, self.menu_closed = 0, 0, False
         self.menu, self.cursor_row = [], 0
+        self.anchor = None                       # selection anchor; None = no selection
+        self.copied = None                       # last text copied (selftest reads it)
         self._last_buf = None
         self._pushback = b""
 
@@ -1930,20 +2008,70 @@ class LineEditor:
             more = len(self.menu) - len(rows)
             hint = "up/down move  tab fill  enter run  esc close" + (f"  ({more} more)" if more else "")
             lines.append(MENU_DIM + _clip(hint, cols - 1) + RESET)
-        text = prompt + self.buf
-        n = _width(text)
+        lo, hi = self._selection()
+        rows, crow, ccol = _layout(prompt, self.buf, cols, self.pos)
+        if lo != hi and not final:               # selected text in reverse video
+            marked = self.buf[:lo] + "\x00" + self.buf[lo:hi] + "\x01" + self.buf[hi:]
+            drawn = [r.replace("\x00", "\x1b[7m").replace("\x01", RESET)
+                     for r in _layout_marked(prompt, marked, cols)]
+        else:
+            drawn = rows
         out = "\r" + (f"\x1b[{self.cursor_row}A" if self.cursor_row else "") + "\x1b[J"
-        out += "".join(l + "\n" for l in lines) + text
-        if n and n % cols == 0:
-            out += "\n"                          # force the wrap instead of a pending one
-        end_row = n // cols
-        cpos = _width(prompt + self.buf[:self.pos])
-        crow, ccol = cpos // cols, cpos % cols
+        out += "".join(l + "\n" for l in lines) + "\n".join(drawn)
+        end_row = len(rows) - 1
         if not final:                            # a finished line leaves the cursor at its end
             out += "\r" + (f"\x1b[{end_row - crow}A" if end_row > crow else "")
             out += f"\x1b[{ccol}C" if ccol else ""
         self.cursor_row = len(lines) + (end_row if final else crow)
         self.out(out)
+
+    def _selection(self):
+        if self.anchor is None or self.anchor == self.pos:
+            return self.pos, self.pos
+        return min(self.anchor, self.pos), max(self.anchor, self.pos)
+
+    def _delete_selection(self):
+        lo, hi = self._selection()
+        self.anchor = None
+        if lo == hi:
+            return False
+        self.buf, self.pos = self.buf[:lo] + self.buf[hi:], lo
+        return True
+
+    def _copy(self, text):
+        """Copy to the system clipboard: pbcopy on macOS, else OSC 52."""
+        self.copied = text
+        if self._keys is not None:
+            return
+        try:
+            subprocess.run(["pbcopy"], input=text.encode(), check=True, timeout=2)
+        except (OSError, subprocess.SubprocessError):
+            import base64
+            self.out("\x1b]52;c;" + base64.b64encode(text.encode()).decode() + "\x07")
+
+    def _line_bounds(self):
+        """(start, end) of the logical line the cursor is on."""
+        start = self.buf.rfind("\n", 0, self.pos) + 1
+        end = self.buf.find("\n", self.pos)
+        return start, (len(self.buf) if end < 0 else end)
+
+    def _move_line(self, step):
+        """Move the cursor to the previous/next logical line, keeping the
+        column. Returns False when there is no such line (history takes over)."""
+        start, end = self._line_bounds()
+        col = self.pos - start
+        if step < 0:
+            if start == 0:
+                return False
+            pstart = self.buf.rfind("\n", 0, start - 1) + 1
+            self.pos = min(pstart + col, start - 1)
+        else:
+            if end >= len(self.buf):
+                return False
+            nend = self.buf.find("\n", end + 1)
+            nend = len(self.buf) if nend < 0 else nend
+            self.pos = min(end + 1 + col, nend)
+        return True
 
     # -- editing helpers --
     def _insert(self, s):
@@ -1966,17 +2094,17 @@ class LineEditor:
 
     def _word_left(self):
         i = self.pos
-        while i > 0 and self.buf[i - 1] == " ":
+        while i > 0 and self.buf[i - 1] in " \n":
             i -= 1
-        while i > 0 and self.buf[i - 1] != " ":
+        while i > 0 and self.buf[i - 1] not in " \n":
             i -= 1
         return i
 
     def _word_right(self):
         i, n = self.pos, len(self.buf)
-        while i < n and self.buf[i] != " ":
+        while i < n and self.buf[i] not in " \n":
             i += 1
-        while i < n and self.buf[i] == " ":
+        while i < n and self.buf[i] in " \n":
             i += 1
         return i
 
@@ -1986,6 +2114,7 @@ class LineEditor:
         self.cursor_row = 0
         line = self.buf
         self.buf, self.pos, self.hist_i, self._last_buf = "", 0, None, None
+        self.anchor = None
         return line
 
     # -- main entry --
@@ -2030,15 +2159,42 @@ class LineEditor:
                     self.pos = len(self.buf)
                     self._last_buf = self.buf     # keep the highlight on the filled row
             elif k in ("up", "backtab"):
+                self.anchor = None
                 if menu:
                     self.sel = (self.sel - 1) % len(menu)
-                else:
+                elif not self._move_line(-1):
                     self._hist(-1)
             elif k == "down":
+                self.anchor = None
                 if menu:
                     self.sel = (self.sel + 1) % len(menu)
-                else:
+                elif not self._move_line(+1):
                     self._hist(+1)
+            elif k == "newline":
+                self._delete_selection()
+                self._insert("\n")
+            elif k.startswith("sel-"):
+                if self.anchor is None:
+                    self.anchor = self.pos
+                move = k[4:]
+                if move == "left":
+                    self.pos = max(0, self.pos - 1)
+                elif move == "right":
+                    self.pos = min(len(self.buf), self.pos + 1)
+                elif move == "home":
+                    self.pos = 0
+                elif move == "end":
+                    self.pos = len(self.buf)
+                elif move == "word-left":
+                    self.pos = self._word_left()
+                elif move == "word-right":
+                    self.pos = self._word_right()
+            elif k == "select-all":
+                if self.buf:
+                    self.anchor, self.pos = 0, len(self.buf)
+            elif k == "copy":
+                lo, hi = self._selection()
+                self._copy(self.buf[lo:hi] if lo != hi else self.buf)
             elif k == "esc":
                 if menu:
                     self.menu_closed = True
@@ -2054,39 +2210,53 @@ class LineEditor:
                 self.cursor_row = 0
                 self._last_buf = None
             elif k == "bs":
-                if self.pos:
+                if not self._delete_selection() and self.pos:
                     self.buf = self.buf[:self.pos - 1] + self.buf[self.pos:]
                     self.pos -= 1
             elif k == "del":
-                self.buf = self.buf[:self.pos] + self.buf[self.pos + 1:]
+                if not self._delete_selection():
+                    self.buf = self.buf[:self.pos] + self.buf[self.pos + 1:]
             elif k == "left":
-                self.pos = max(0, self.pos - 1)
+                lo, hi = self._selection()
+                self.pos = lo if lo != hi else max(0, self.pos - 1)
+                self.anchor = None
             elif k == "right":
-                self.pos = min(len(self.buf), self.pos + 1)
+                lo, hi = self._selection()
+                self.pos = hi if lo != hi else min(len(self.buf), self.pos + 1)
+                self.anchor = None
             elif k == "home":
+                self.anchor = None
                 self.pos = 0
             elif k == "end":
+                self.anchor = None
                 self.pos = len(self.buf)
             elif k == "word-left":
+                self.anchor = None
                 self.pos = self._word_left()
             elif k == "word-right":
+                self.anchor = None
                 self.pos = self._word_right()
             elif k == "kill-line":
+                self.anchor = None
                 self.buf, self.pos = "", 0
             elif k == "kill-end":
+                self.anchor = None
                 self.buf = self.buf[:self.pos]
             elif k == "kill-word":
+                self.anchor = None
                 i = self._word_left()
                 self.buf, self.pos = self.buf[:i] + self.buf[self.pos:], i
             elif k == "clear":
                 self.out("\x1b[2J\x1b[H")
                 self.cursor_row = 0
             elif k.startswith("paste:"):
-                parts = k[6:].replace("\r", "\n").split("\n")
-                self._insert(" ".join(x.strip() for x in parts if x.strip()))
+                self._delete_selection()
+                parts = [x.rstrip() for x in k[6:].replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+                self._insert("\n".join(parts).strip("\n"))   # a pasted paragraph keeps its lines
             elif k == "ignore":
                 pass
             elif len(k) == 1 or (k and k.isprintable()):
+                self._delete_selection()
                 self._insert(k)
 
 def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
@@ -2539,7 +2709,7 @@ def selftest(min_score):
     check("menu: '/scope firm-e' filters to firm-echo, '/matter ' lists matters, '/set ' lists keys",
           [r[0] for r in chat_menu("/scope firm-e", st)] == ["/scope firm-echo"]
           and "/matter synthetic-counsel" in [r[0] for r in chat_menu("/matter ", st)]
-          and [r[1] for r in chat_menu("/set ", st)] == ["/set top-k ", "/set min-score ", "/set dense-min "])
+          and [r[1] for r in chat_menu("/set ", st)] == ["/set top-k ", "/set min-score ", "/set dense-min ", "/set think-budget "])
     check("menu: a fill that needs an argument ends with a space, one that runs does not",
           dict((r[0], r[1]) for r in chat_menu("/", st))["/scope"] == "/scope "
           and dict((r[0], r[1]) for r in chat_menu("/", st))["/show"] == "/show")
@@ -2571,8 +2741,41 @@ def selftest(min_score):
           drive(list("abc") + ["kill-line", "z", "enter"])[0] == "z"
           and drive(list("ab cd") + ["left", "kill-end", "enter"])[0] == "ab c"
           and drive(list("one two") + ["kill-word", "enter"])[0] == "one ")
-    check("editor: a multi-line paste folds into one line",
-          drive(["paste:line one\r\nline two\n", "enter"])[0] == "line one line two")
+    check("editor: a multi-line paste keeps its lines, trailing blank lines dropped",
+          drive(["paste:line one\r\nline two\n", "enter"])[0] == "line one\nline two")
+    check("editor: option-enter inserts a newline and enter submits both lines",
+          drive(list("ab") + ["newline"] + list("cd") + ["enter"])[0] == "ab\ncd")
+    check("editor: up/down move between lines of a multi-line buffer before touching history",
+          drive(list("abc") + ["newline"] + list("xy") + ["up", "Z", "enter"], history=["old"])[0] == "abZc\nxy"
+          and drive(["up", "enter"], history=["old"])[0] == "old")
+    check("editor: shift-left selects and typing replaces the selection",
+          drive(list("hello") + ["sel-left", "sel-left", "X", "enter"])[0] == "helX")
+    check("editor: select-all then backspace empties, select-all then a key replaces all",
+          drive(list("abc") + ["select-all", "bs", "z", "enter"])[0] == "z"
+          and drive(list("abc") + ["select-all", "q", "enter"])[0] == "q")
+    check("editor: shift-home selects to the start, a plain arrow collapses the selection",
+          drive(list("abc") + ["sel-home", "left", "X", "enter"])[0] == "Xabc"
+          and drive(list("abc") + ["sel-word-left", "right", "X", "enter"])[0] == "abcX")
+    check("editor: option-c copies the selection, or the whole line with none",
+          drive(list("abc") + ["sel-left", "copy", "enter"])[2].copied == "c"
+          and drive(list("abc") + ["copy", "enter"])[2].copied == "abc")
+    check("editor: option-arrows jump words across a newline",
+          drive(list("one two") + ["newline"] + list("three") + ["word-left", "word-left", "X", "enter"])[0] == "one Xtwo\nthreeX".replace("threeX", "three"))
+    check("editor: the selection is drawn in reverse video",
+          "\x1b[7m" in drive(list("abc") + ["sel-left", "enter"])[1])
+    rows, crow, ccol = _layout("m > ", "abcdefgh\nxy", 8, 10)
+    check("layout: rows break at a newline and at the width, cursor lands on its row",
+          rows == ["m > abcd", "efgh", "xy"] and (crow, ccol) == (2, 1))
+    check("history: a multi-line entry survives the file round trip",
+          _hist_decode(_hist_encode("a\nb\\c")) == "a\nb\\c" and "\n" not in _hist_encode("a\nb"))
+    check("display: a newline in the question starts a new band row",
+          len(turn_head("first\nsecond", "ask").split("\n")) == 2)
+    st3 = ChatState("synthetic-counsel")
+    check("chat: /set think-budget changes the reason budget and rejects a bad value",
+          chat_command(st3, "/set think-budget 12000")[1].endswith("think-budget 12,000")
+          and st3.think_budget == 12000
+          and "between 500 and 24000" in chat_command(st3, "/set think-budget 100")[1]
+          and "TRUNCATED: the model hit the 12,000-token limit" in truncation_warning({"finish": "length"}, {"max_tokens": 12000}))
     check("editor: ctrl-d on an empty line is EOF, on text it is ignored",
           drive(["eof"])[0] is None and drive(["a", "eof", "enter"])[0] == "a")
     check("editor: ctrl-c drops the line and starts over",
@@ -2732,6 +2935,8 @@ def main():
     ap.add_argument("--out", help="summarize: write the summary to this file")
     ap.add_argument("--show-thinking", action="store_true",
                     help="reason: stream the thinking trace in gray instead of a counter")
+    ap.add_argument("--think-budget", type=int,
+                    help="reason: max_tokens shared by the thinking and the answer (default 8000)")
     ap.add_argument("what", nargs="+",
                     help='"ingest", "coverage", "selftest", "chat", "summarize", '
                          '"reason <question>", or a question')
@@ -2752,7 +2957,7 @@ def main():
         parts = cmd.split(None, 1)
         if len(parts) < 2: sys.exit('usage: ask.py --matter <name> reason "your question"')
         reason(a.matter, parts[1], a.top_k, a.min_score, only=a.only, dense_min=a.dense_min,
-               show_thinking=a.show_thinking)
+               show_thinking=a.show_thinking, think_budget=a.think_budget)
     elif cmd == "ingest":
         if not a.matter: sys.exit("ingest needs --matter <name>")
         ingest(a.matter)

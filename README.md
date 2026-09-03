@@ -53,7 +53,11 @@ Set the standard `NO_COLOR` variable to fall back to reverse video. Keys:
 
 | Key | Menu open | Menu closed |
 |---|---|---|
-| up / down | move the highlight | walk the history (up recalls the last line) |
+| up / down | move the highlight | move between the lines of a multi-line question, then walk the history (up recalls the last line) |
+| option-enter | | insert a newline (shift-enter cannot: the terminal sends it as enter) |
+| shift + left / right, shift + option + arrows, shift + home / end | | select characters, words, or to the line ends; typing replaces the selection, backspace deletes it |
+| option-a, option-c | | select all, copy the selection (the whole line when nothing is selected) |
+| option + left / right, ctrl + left / right | | jump a word |
 | tab | fill the highlighted row | |
 | enter | run the highlighted row | send the line |
 | esc | close the menu | |
@@ -74,7 +78,7 @@ Commands:
 | `/reingest` | convert new files, rebuild the index, show coverage |
 | `/reason <question>` | think first, then compute and compare over the sources; conclusions are labeled `[INFERENCE]` (slower, lower trust) |
 | `/think [on\|off]` | show the `/reason` thinking trace in gray as it streams; no value toggles (default off, a counter shows instead) |
-| `/set <key> <value>` | `top-k`, `min-score` (BM25 gate), `dense-min` (cosine gate) |
+| `/set <key> <value>` | `top-k`, `min-score` (BM25 gate), `dense-min` (cosine gate), `think-budget` (reason-mode `max_tokens`, default 8000) |
 | `/diverse [on\|off]` | best chunk per source first; no value toggles |
 | `/show` | print the current settings |
 | `/help` | list the commands |
@@ -116,7 +120,8 @@ not a terminal (a pipe, a test), the chat falls back to a plain prompt.
   the trace into a verbatim cycle, so they are not byte-reproducible; the
   audit line keeps the trace. If the trace does start repeating itself the
   run is stopped and says `LOOP`; if the thinking eats the whole budget the
-  run says `TRUNCATED` instead of pretending.
+  run says `TRUNCATED` instead of pretending; raise the budget with
+  `/set think-budget 12000` (the thinking and the answer share it).
 - **Summarize (compose).** A two-stage summary: first gather the matter's own
   chunks as numbered, cited sources, then compose bullets from only those. Every
   bullet carries a citation, and the same deterministic checks run over the
@@ -174,7 +179,7 @@ python3 ask.py --matter <name> ingest
 python3 ask.py --matter <name> coverage
 python3 ask.py --matter <name> chat
 python3 ask.py --matter <name> "your question"
-python3 ask.py --matter <name> reason "a question that needs arithmetic or comparison" [--show-thinking]
+python3 ask.py --matter <name> reason "a question that needs arithmetic or comparison" [--show-thinking] [--think-budget N]
 python3 ask.py --matter <name> batch questions.txt
 python3 ask.py --matter <name> summarize [--only <folder>] [--out file.md]
 ```
