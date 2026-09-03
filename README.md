@@ -73,6 +73,7 @@ Commands:
 | `/matters` | list the matters |
 | `/reingest` | convert new files, rebuild the index, show coverage |
 | `/reason <question>` | think first, then compute and compare over the sources; conclusions are labeled `[INFERENCE]` (slower, lower trust) |
+| `/think [on\|off]` | show the `/reason` thinking trace in gray as it streams; no value toggles (default off, a counter shows instead) |
 | `/set <key> <value>` | `top-k`, `min-score` (BM25 gate), `dense-min` (cosine gate) |
 | `/diverse [on\|off]` | best chunk per source first; no value toggles |
 | `/show` | print the current settings |
@@ -98,7 +99,8 @@ not a terminal (a pipe, a test), the chat falls back to a plain prompt.
   and conclude over the cited facts, it must show the arithmetic, and every
   conclusion that is not written in a source carries an `[INFERENCE]` label.
   The model thinks before it answers; the thinking trace and the token count
-  go into the audit line, and a live counter shows progress. It retrieves at
+  go into the audit line, and a live counter shows progress (`/think on` or
+  `--show-thinking` streams the trace itself in gray instead). It retrieves at
   least 8 chunks, best chunk per source first. Expect one to three minutes per
   question on a 9B model, against a few seconds for ask. Lower trust than ask:
   a computed number is a new number, so the number check reports it and the
@@ -165,7 +167,7 @@ python3 ask.py --matter <name> ingest
 python3 ask.py --matter <name> coverage
 python3 ask.py --matter <name> chat
 python3 ask.py --matter <name> "your question"
-python3 ask.py --matter <name> reason "a question that needs arithmetic or comparison"
+python3 ask.py --matter <name> reason "a question that needs arithmetic or comparison" [--show-thinking]
 python3 ask.py --matter <name> batch questions.txt
 python3 ask.py --matter <name> summarize [--only <folder>] [--out file.md]
 ```

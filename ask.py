@@ -1190,7 +1190,7 @@ def truncation_warning(meta, gen=None):
             f"may be cut or empty. Ask a narrower question, or raise max_tokens.")
 
 def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=None,
-           dense_min=0.5, diverse=True):
+           dense_min=0.5, diverse=True, show_thinking=False):
     """Same retrieval and gate as ask(), a different contract with the model:
     reason-prompt.txt lets it compute and compare over the cited facts, every
     conclusion is labeled [INFERENCE], and the model thinks first (thinking on,
@@ -1243,31 +1243,45 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
         if len(trace) % 50 == 0 and looks_stuck("".join(trace)):
             raise StopGeneration()
     on_token, on_think, live, count = None, watch, False, [0]
+    dim = MENU_DIM if _COLOR else ""   # the trace and the counter are dim gray; NO_COLOR = plain
     if not quiet:
         live = sys.stdout.isatty()
         def on_think(t):
             watch(t)
-            # a live counter so a two-minute think does not look like a hang
             count[0] += 1
-            if live and count[0] % 10 == 1:
-                sys.stdout.write(f"\r{MENU_DIM}  thinking... {count[0]:,} tokens, "
+            if show_thinking:
+                # the trace itself, live, in gray; the answer follows in normal text
+                if count[0] == 1:
+                    sys.stdout.write(f"{dim}--- thinking ---\n")
+                sys.stdout.write(t)
+                sys.stdout.flush()
+            elif live and count[0] % 10 == 1:
+                # a live counter so a two-minute think does not look like a hang
+                sys.stdout.write(f"\r{dim}  thinking... {count[0]:,} tokens, "
                                  f"{time.time() - t0:.0f}s{RESET}\x1b[K")
                 sys.stdout.flush()
+        def end_thinking():
+            n, secs = count[0], time.time() - t0
+            if show_thinking:
+                sys.stdout.write(f"{RESET if dim else ''}\n{dim}--- thought for {n:,} tokens, {secs:.0f}s ---{RESET}\n")
+            elif live:
+                sys.stdout.write(f"\r{dim}  thought for {n:,} tokens, {secs:.0f}s{RESET}\x1b[K\n")
+            else:
+                sys.stdout.write(f"  (thought for {n:,} tokens)\n")
+            count[0] = 0
         def on_token(t):
             if count[0]:
-                if live:
-                    sys.stdout.write(f"\r{MENU_DIM}  thought for {count[0]:,} tokens, "
-                                     f"{time.time() - t0:.0f}s{RESET}\x1b[K\n")
-                else:
-                    sys.stdout.write(f"  (thought for {count[0]:,} tokens)\n")
-                count[0] = 0
+                end_thinking()
             sys.stdout.write(t)
             sys.stdout.flush()
     answer, usage, meta = generate(system, user, chat_model, on_token,
                                    gen=REASON_GEN, thinking=True, on_think=on_think)
     if not quiet:
-        if not answer and count[0] and live:
-            sys.stdout.write("\r\x1b[K")
+        if not answer and count[0]:          # the trace ended without an answer (loop, cap)
+            if show_thinking:
+                end_thinking()
+            elif live:
+                sys.stdout.write("\r\x1b[K")
         print()
     warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
@@ -1423,6 +1437,7 @@ CHAT_COMMANDS = [
     ("matters",  "",               "list the matters",                                       None),
     ("reingest", "",               "convert new files, rebuild the index, show coverage",    None),
     ("reason",   "<question>",     "think, compute and compare over the sources; conclusions are labeled [INFERENCE]", None),
+    ("think",    "[on|off]",       "show the /reason thinking trace in gray as it streams; no value toggles", None),
     ("set",      "<key> <value>",  "top-k | min-score | dense-min",                          "keys"),
     ("diverse",  "[on|off]",       "diverse retrieval; no value toggles",                    None),
     ("show",     "",               "print the current settings",                             None),
@@ -1509,6 +1524,7 @@ class ChatState:
     def __init__(self, matter, top_k=5, min_score=1.0, only=None, dense_min=0.5, diverse=False):
         self.matter, self.top_k, self.min_score = matter, top_k, min_score
         self.scope, self.dense_min, self.diverse = only, dense_min, diverse
+        self.show_thinking = False           # /think: stream the reason-mode trace in gray
         self.index, self.files = None, []
         self.load()
 
@@ -1525,7 +1541,8 @@ class ChatState:
     def show(self):
         return (f"matter: {self.matter} | scope: {self.scope or 'whole matter'} | "
                 f"top-k {self.top_k} | min-score {self.min_score} | dense-min {self.dense_min} | "
-                f"diverse {'on' if self.diverse else 'off'}")
+                f"diverse {'on' if self.diverse else 'off'} | "
+                f"think {'on' if self.show_thinking else 'off'}")
 
 def chat_command(state, line):
     """Run one '/' command against the state. Returns (keep_going, text).
@@ -1545,7 +1562,8 @@ def chat_command(state, line):
             return True, "usage: /reason <question>   (thinks first; slower, lower trust than a plain question)"
         try:
             reason(state.matter, arg, state.top_k, state.min_score, only=state.scope,
-                   batch="chat", dense_min=state.dense_min, diverse=True)
+                   batch="chat", dense_min=state.dense_min, diverse=True,
+                   show_thinking=state.show_thinking)
         except SystemExit as e:
             return True, f"!!  {e.code}" if e.code else ""
         except (urllib.error.URLError, OSError) as e:
@@ -1616,6 +1634,17 @@ def chat_command(state, line):
         except ValueError:
             return True, f"bad value {val!r} for {key}"
         return True, state.show()
+    if cmd == "think":
+        a = arg.lower()
+        if not a:
+            state.show_thinking = not state.show_thinking
+        elif a in ("on", "true", "yes"):
+            state.show_thinking = True
+        elif a in ("off", "false", "no"):
+            state.show_thinking = False
+        else:
+            return True, "usage: /think [on|off]"
+        return True, f"think: {'on' if state.show_thinking else 'off'} (the /reason trace streams in gray when on)"
     if cmd == "diverse":
         a = arg.lower()
         if not a:
@@ -2526,6 +2555,15 @@ def selftest(min_score):
           and verify_inference_labels("Firm Alpha quoted $4,800 [S1].") == [])
     check("chat: /reason without a question prints usage and keeps the session",
           chat_command(st, "/reason") == (True, "usage: /reason <question>   (thinks first; slower, lower trust than a plain question)"))
+    st2 = ChatState("synthetic-counsel")
+    check("chat: /think toggles, /think on|off set, a bad value prints usage, /show reports it",
+          not st2.show_thinking
+          and chat_command(st2, "/think")[1].startswith("think: on") and st2.show_thinking
+          and chat_command(st2, "/think")[1].startswith("think: off") and not st2.show_thinking
+          and chat_command(st2, "/think on")[1].startswith("think: on") and st2.show_thinking
+          and "think on" in st2.show()
+          and chat_command(st2, "/think off")[1].startswith("think: off") and not st2.show_thinking
+          and chat_command(st2, "/think maybe") == (True, "usage: /think [on|off]"))
     check("menu: '/re' offers /reason and /reingest",
           [r[0] for r in chat_menu("/re", st)] == ["/reingest", "/reason"])
 
@@ -2578,6 +2616,8 @@ def main():
     ap.add_argument("--diverse", action="store_true",
                     help="take the best chunk per source before filling slots; helps aggregate questions that span multiple firms")
     ap.add_argument("--out", help="summarize: write the summary to this file")
+    ap.add_argument("--show-thinking", action="store_true",
+                    help="reason: stream the thinking trace in gray instead of a counter")
     ap.add_argument("what", nargs="+",
                     help='"ingest", "coverage", "selftest", "chat", "summarize", '
                          '"reason <question>", or a question')
@@ -2597,7 +2637,8 @@ def main():
         if not a.matter: sys.exit("reason needs --matter <name>")
         parts = cmd.split(None, 1)
         if len(parts) < 2: sys.exit('usage: ask.py --matter <name> reason "your question"')
-        reason(a.matter, parts[1], a.top_k, a.min_score, only=a.only, dense_min=a.dense_min)
+        reason(a.matter, parts[1], a.top_k, a.min_score, only=a.only, dense_min=a.dense_min,
+               show_thinking=a.show_thinking)
     elif cmd == "ingest":
         if not a.matter: sys.exit("ingest needs --matter <name>")
         ingest(a.matter)
