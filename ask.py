@@ -800,6 +800,50 @@ def hybrid(chunks, question, top_k, stats_chunks, emb_model, diverse=False):
     hits = [(bm_score.get(i, 0.0), cos_score.get(i), by_id[i]) for i in top]
     return hits, bm_top, cos_top
 
+GENERIC_FOLDER_WORDS = {"firm", "ip", "law", "llp", "llc", "pc", "group", "partners", "the", "and", "of", "co"}
+PER_FOLDER_MIN = 3   # chunks each named folder is guaranteed on a multi-folder question
+
+def folders_named(question, chunks):
+    """The docs/ folders a question names, matched by a distinctive word of the
+    folder name ('firm-alpha' matches 'Alpha'; 'adibi-ip' matches 'Adibi').
+    Returns [] unless at least two folders are named."""
+    words = set(re.findall(r"[a-z0-9]+", question.lower()))
+    folders = sorted({c["file"].split("/", 1)[0] for c in chunks if "/" in c["file"]})
+    named = []
+    for f in folders:
+        toks = [t for t in re.split(r"[-_. ]+", f.lower()) if t and t not in GENERIC_FOLDER_WORDS]
+        if toks and any(t in words for t in toks):
+            named.append(f)
+    return named if len(named) >= 2 else []
+
+def retrieve(chunks, question, top_k, stats_chunks, emb_model, diverse=False):
+    """hybrid(), plus per-folder quotas when the question names several
+    folders: each named folder gets its own best chunks (so a firm's
+    provisional AND utility fee chunks both come along), then the remaining
+    slots fill from the global ranking. Returns (hits, bm_top, cos_top, named)."""
+    named = folders_named(question, chunks)
+    if not named:
+        hits, bm_top, cos_top = hybrid(chunks, question, top_k, stats_chunks, emb_model, diverse=diverse)
+        return hits, bm_top, cos_top, []
+    quota = max(PER_FOLDER_MIN, top_k // len(named))
+    stats = stats_chunks or chunks
+    picked, seen = [], set()
+    for f in named:
+        sub = [c for c in chunks if c["file"].startswith(f + "/")]
+        h, _, _ = hybrid(sub, question, quota, stats, emb_model, diverse=False)
+        for s_, cs, c in h:
+            if (s_ > 0 or (cs or 0) > 0) and c["id"] not in seen:
+                seen.add(c["id"]); picked.append((s_, cs, c))
+    want = max(top_k, len(picked))
+    glob, bm_top, cos_top = hybrid(chunks, question, want, stats_chunks, emb_model, diverse=diverse)
+    for s_, cs, c in glob:
+        if len(picked) >= want:
+            break
+        if c["id"] not in seen:
+            seen.add(c["id"]); picked.append((s_, cs, c))
+    picked.sort(key=lambda t: -(t[0] + 10 * (t[1] or 0)))   # score order for the [S#] labels
+    return picked, bm_top, cos_top, named
+
 # ---------------- LM Studio ----------------
 
 def http_json(url, payload=None, timeout=300):
@@ -1140,12 +1184,12 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     chat_model, emb_model = server_models()
     if not index.get("embed_model"):
         emb_model = None  # index has no vectors; stay BM25-only
-    hits, bm_top, cos_top = hybrid(chunks, question, top_k,
-                                   index["chunks"] if only else None, emb_model,
-                                   diverse=diverse)
+    hits, bm_top, cos_top, named = retrieve(chunks, question, top_k,
+                                            index["chunks"] if only else None, emb_model,
+                                            diverse=diverse)
     hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
     audit = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter,
-             "question": question, "only": only, "batch": batch,
+             "question": question, "only": only, "batch": batch, "per_folder": named or None,
              "top_score": round(bm_top, 3),
              "cos_top": round(cos_top, 3) if cos_top is not None else None,
              "dense": emb_model is not None,
@@ -1190,7 +1234,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
                   "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
     _log(matter, audit)
     if not quiet:
-        print("\n" + sources_block(hits))
+        print("\n" + sources_block(hits, named=named))
         for w in warnings:
             print(warn_line(w))
         print(context_line(usage) + "\n")
@@ -1241,12 +1285,12 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
         emb_model = None
     # a follow-up ("and Bravo?") retrieves on both questions so the topic carries over
     query = question + " " + previous["question"] if previous and previous.get("question") else question
-    hits, bm_top, cos_top = hybrid(chunks, query, top_k,
-                                   index["chunks"] if only else None, emb_model,
-                                   diverse=diverse)
+    hits, bm_top, cos_top, named = retrieve(chunks, query, top_k,
+                                            index["chunks"] if only else None, emb_model,
+                                            diverse=diverse)
     hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
     audit = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter, "mode": "reason",
-             "question": question, "only": only, "batch": batch,
+             "question": question, "only": only, "batch": batch, "per_folder": named or None,
              "previous": ({"question": previous.get("question"), "answer_chars": len(previous.get("answer") or "")}
                           if previous else None),
              "top_score": round(bm_top, 3),
@@ -1339,7 +1383,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
                   "finish": meta["finish"], "config": config})
     _log(matter, audit)
     if not quiet:
-        print("\n" + sources_block(hits))
+        print("\n" + sources_block(hits, named=named))
         if any(w.startswith("UNVERIFIED NUMBER") for w in warnings):
             print(DIM + "(reason mode: a computed number is expected to be unverified; check the arithmetic)" + RESET)
         for w in warnings:
@@ -1558,8 +1602,9 @@ def warn_line(w):
     color = FAIL_COLOR if w.startswith(FAIL_WARNINGS) else WARN_COLOR
     return f"{color}!!  {w}{RESET}"
 
-def sources_block(hits, scored=True):
-    out = [f"{DIM}\u2500\u2500 sources{RESET}"]
+def sources_block(hits, scored=True, named=None):
+    note = f" \u00b7 per folder: {', '.join(named)}" if named else ""
+    out = [f"{DIM}\u2500\u2500 sources{note}{RESET}"]
     for i, h in enumerate(hits, 1):
         s, cs, c = h if scored else (None, None, h)
         extra = ""
@@ -1848,6 +1893,8 @@ def chat_menu(buffer, state):
         return [(f"/{cmd} {m}", f"/{cmd} {m}", "current" if m == state.matter else "")
                 for m in matters_list() if m.lower().startswith(arg)]
     if spec[3] == "keys":
+        if len(arg.split()) >= 2:                # a value is being typed: no menu in the way
+            return []
         keys = (("top-k", str(state.top_k)), ("min-score", str(state.min_score)),
                 ("dense-min", str(state.dense_min)), ("think-budget", str(state.think_budget)))
         return [(f"/{cmd} {k} <value>", f"/{cmd} {k} ", f"now {v}")
@@ -2190,7 +2237,9 @@ class LineEditor:
             k = self._read_key()
             menu = self.menu
             if k == "enter":
-                if menu and self.buf.strip() != menu[self.sel][0]:
+                fill = menu[self.sel][1] if menu else ""
+                typed_more = fill.endswith(" ") and self.buf.startswith(fill) and len(self.buf.strip()) > len(fill.strip())
+                if menu and self.buf.strip() != menu[self.sel][0] and not typed_more:
                     self.buf = menu[self.sel][1]
                     self.pos = len(self.buf)
                     if self.buf.endswith(" "):
@@ -2889,6 +2938,24 @@ def selftest(min_score):
           == "- A process is followed [S2][S4][S6].")
     check("cap_citations: one or two citations are left untouched",
           cap_citations("- Alpha quoted $4,800 [S1][S3].") == "- Alpha quoted $4,800 [S1][S3].")
+
+    # per-folder retrieval for questions that name several firms
+    sc = load_index("synthetic-counsel")["chunks"]
+    check("retrieval: a question naming three firms maps to their folders, one firm maps to none",
+          folders_named("Compare Firm Alpha, Bravo and Charlie fees", sc) == ["firm-alpha", "firm-bravo", "firm-charlie"]
+          and folders_named("What did Firm Alpha quote?", sc) == []
+          and folders_named("what is the firm fee", sc) == [])
+    h3, _, _, named3 = retrieve(sc, "Compare Firm Alpha, Firm Bravo and Firm Charlie: provisional, utility and office action fees", 8, None, None)
+    per = {f: sum(1 for _, _, c in h3 if c["file"].startswith(f + "/")) for f in named3}
+    check("retrieval: each named folder gets at least its quota of chunks",
+          named3 == ["firm-alpha", "firm-bravo", "firm-charlie"] and all(n >= 1 for n in per.values())
+          and per["firm-alpha"] >= 2 and per["firm-charlie"] >= 2 and len(h3) >= 8)
+    check("retrieval: a single-firm question is unchanged (plain hybrid)",
+          retrieve(sc, "What did Firm Alpha quote for a provisional?", 5, None, None)[3] == []
+          and len(retrieve(sc, "What did Firm Alpha quote for a provisional?", 5, None, None)[0]) == 5)
+    check("editor: enter keeps a typed /set value instead of refilling the row",
+          drive(list("/set top-k 8") + ["enter"])[0] == "/set top-k 8"
+          and chat_menu("/set top-k 8", st) == [] and chat_menu("/set top", st) != [])
 
     # turn display: band, rule, warnings, estimate
     long_q = "word " * 60

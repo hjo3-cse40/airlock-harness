@@ -135,6 +135,13 @@ not a terminal (a pipe, a test), the chat falls back to a plain prompt.
   result. Summarizing is a separate, clearly lower-trust mode, because composed
   prose can still drop a condition or add a qualifier that no check catches.
 
+A question that names two or more folders (for example three firms) retrieves
+per folder: each named folder gets its own best chunks (at least 3, or an
+equal share of top-k), then the remaining slots fill from the whole matter.
+This is what keeps a firm's provisional fee AND its utility fee in the prompt
+when they sit in different chunks; plain ranking would let the strongest firm
+take every slot. The sources line says `per folder: ...` when this happened.
+
 ## How it works
 
 Each question runs through a fixed pipeline:
