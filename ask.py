@@ -1095,8 +1095,12 @@ def verify_inference_labels(answer):
     derived = "=" in answer or re.search(r"(?i)\b(conclusion|therefore|closest|closer|would not|does not qualify)\b", answer)
     return ["NO INFERENCE LABEL: the answer computes or concludes but marks nothing as [INFERENCE]"] if derived else []
 
-def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, dense_min=0.5, diverse=False):
+def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, dense_min=0.5,
+        diverse=False, head=True):
+    """head=False skips the question band (batch prints its own header)."""
     index = load_index(matter)
+    if not quiet and head:
+        print(turn_head(question, "ask", only))
     sk = index.get("skipped") or []
     if sk and not quiet:
         print(f"[coverage] {len(sk)} file(s) in this matter are NOT indexed and cannot be "
@@ -1127,11 +1131,13 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
         audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None,
                       "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
         _log(matter, audit)
+        if not quiet:
+            print(answer_rule("answer"))
         print(REFUSAL)
         gate_msg = f"(bm25 {audit['top_score']} < gate {min_score}"
         if cos_top is not None:
             gate_msg += f", cosine {audit['cos_top']} < {dense_min}"
-        print(gate_msg + "; the model was not called)")
+        print(DIM + gate_msg + "; the model was not called)" + RESET + "\n")
         return audit
     model = chat_model
     if model is None:
@@ -1143,6 +1149,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     t0 = time.time()
     on_token = None
     if not quiet:
+        print(answer_rule("answer", estimate_tokens(system, user)))
         def on_token(t):
             sys.stdout.write(t)
             sys.stdout.flush()
@@ -1157,18 +1164,10 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
                   "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
     _log(matter, audit)
     if not quiet:
-        print("\n--- Sources ---")
-        for i, (s, cs, c) in enumerate(hits, 1):
-            extra = f", cos {cs:.2f}" if cs is not None else ""
-            print(f"[S{i}] {c['file']} > {c['heading'] or '(no heading)'}  (bm25 {s:.2f}{extra})")
+        print("\n" + sources_block(hits))
         for w in warnings:
-            print(f"!!  {w}")
-        if usage:
-            pt = usage.get("prompt_tokens") or 0
-            ct = usage.get("completion_tokens") or 0
-            print(f"--- Context: {pt:,} prompt + {ct:,} answer = {pt+ct:,} / 32,768 ({(pt+ct)*100//32768}%) ---")
-        else:
-            print("--- Context: usage not reported by the server ---")
+            print(warn_line(w))
+        print(context_line(usage) + "\n")
     return audit
 
 # ---------------- reason (think, compute, label inferences) ----------------
@@ -1190,7 +1189,7 @@ def truncation_warning(meta, gen=None):
             f"may be cut or empty. Ask a narrower question, or raise max_tokens.")
 
 def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=None,
-           dense_min=0.5, diverse=True, show_thinking=False):
+           dense_min=0.5, diverse=True, show_thinking=False, head=True):
     """Same retrieval and gate as ask(), a different contract with the model:
     reason-prompt.txt lets it compute and compare over the cited facts, every
     conclusion is labeled [INFERENCE], and the model thinks first (thinking on,
@@ -1198,6 +1197,8 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
     than ask(): computed numbers are new numbers, so the number check reports
     them and the reader checks the arithmetic."""
     index = load_index(matter)
+    if not quiet and head:
+        print(turn_head(question, "reason", only))
     chunks = index["chunks"]
     if only:
         chunks = [c for c in chunks if c["file"].startswith(only)]
@@ -1229,8 +1230,10 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
         audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None,
                       "config": config})
         _log(matter, audit)
+        if not quiet:
+            print(answer_rule("answer"))
         print(REFUSAL)
-        print(f"(bm25 {audit['top_score']} < gate {min_score}; the model was not called)")
+        print(DIM + f"(bm25 {audit['top_score']} < gate {min_score}; the model was not called)" + RESET + "\n")
         return audit
     with open(os.path.join(BASE, "reason-prompt.txt"), encoding="utf-8") as f:
         system = f.read()
@@ -1260,6 +1263,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
                 sys.stdout.write(f"\r{dim}  thinking... {count[0]:,} tokens, "
                                  f"{time.time() - t0:.0f}s{RESET}\x1b[K")
                 sys.stdout.flush()
+        est = estimate_tokens(system, user)
         def end_thinking():
             n, secs = count[0], time.time() - t0
             if show_thinking:
@@ -1269,6 +1273,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
             else:
                 sys.stdout.write(f"  (thought for {n:,} tokens)\n")
             count[0] = 0
+            sys.stdout.write(answer_rule("answer", est) + "\n")
         def on_token(t):
             if count[0]:
                 end_thinking()
@@ -1292,25 +1297,21 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
     if not answer and not tw:
         warnings.append("EMPTY ANSWER: the model returned no text after thinking")
     rt = ((usage or {}).get("completion_tokens_details") or {}).get("reasoning_tokens")
+    if answer and not rt:
+        warnings.append("NO THINKING: the model did not think (turn on Enable Thinking in the "
+                        "LM Studio model settings); this is a plain answer with reason-mode rules")
     audit.update({"refused": False, "answer": answer, "warnings": warnings,
                   "model": chat_model, "latency_s": round(time.time() - t0, 1),
                   "usage": usage, "reasoning": meta["reasoning"], "reasoning_tokens": rt,
                   "finish": meta["finish"], "config": config})
     _log(matter, audit)
     if not quiet:
-        print("\n--- Sources ---")
-        for i, (s, cs, c) in enumerate(hits, 1):
-            extra = f", cos {cs:.2f}" if cs is not None else ""
-            print(f"[S{i}] {c['file']} > {c['heading'] or '(no heading)'}  (bm25 {s:.2f}{extra})")
+        print("\n" + sources_block(hits))
         if any(w.startswith("UNVERIFIED NUMBER") for w in warnings):
-            print("(reason mode: a computed number is expected to be unverified; check the arithmetic)")
+            print(DIM + "(reason mode: a computed number is expected to be unverified; check the arithmetic)" + RESET)
         for w in warnings:
-            print(f"!!  {w}")
-        if usage:
-            pt = usage.get("prompt_tokens") or 0
-            ct = usage.get("completion_tokens") or 0
-            think = f" (thinking {rt:,} of the {ct:,})" if rt else ""
-            print(f"--- Context: {pt:,} prompt + {ct:,} answer{think} = {pt+ct:,} / 32,768 ({(pt+ct)*100//32768}%) ---")
+            print(warn_line(w))
+        print(context_line(usage, rt) + "\n")
     return audit
 
 def machine_slug():
@@ -1396,7 +1397,7 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
         head = f"[{i}/{len(lines)}]" + (f" ({', '.join(notes)})" if notes else "")
         print(f"\n{head} {q}")
         try:
-            a = ask(matter, q, tk, min_score, only=only, batch=tag, dense_min=dense_min, diverse=dv)
+            a = ask(matter, q, tk, min_score, only=only, batch=tag, dense_min=dense_min, diverse=dv, head=False)
         except (urllib.error.URLError, OSError) as e:
             n_err += 1
             print(f"!!  ERROR, question skipped: {e}")
@@ -1456,6 +1457,88 @@ MENU_HL = "\x1b[30;48;5;215m" if _COLOR else "\x1b[7m"   # highlighted row
 MENU_CMD = "\x1b[38;5;81m" if _COLOR else ""              # command name column
 MENU_DIM = "\x1b[2m"                                       # help text, hint line
 RESET = "\x1b[0m"
+
+# ---- turn display: one style for ask, reason and summarize ----
+# The question is echoed in a band so the eye finds the turn; a rule marks
+# where the answer starts and carries the context estimate; warnings are
+# colored so a TRUNCATED or UNVERIFIED line cannot hide in the transcript.
+WARN_COLOR = "\x1b[38;5;214m" if _COLOR else ""          # yellow: a check fired
+FAIL_COLOR = "\x1b[38;5;203m" if _COLOR else ""          # red: no usable answer
+DIM = MENU_DIM if _COLOR else ""
+BOLD = "\x1b[1m" if _COLOR else ""
+FAIL_WARNINGS = ("TRUNCATED", "LOOP", "EMPTY ANSWER", "NO THINKING")
+
+def term_width():
+    try:
+        return max(40, min(shutil.get_terminal_size().columns, 120))
+    except (ValueError, OSError):
+        return 80
+
+def estimate_tokens(*texts):
+    """About 4 characters per token for this corpus (measured 3.9 to 4.7 on real
+    prompts). Labeled 'about' wherever it is shown; the exact count follows."""
+    return sum(len(t) for t in texts) // 4
+
+BAND = "\x1b[15;48;5;31m"   # white on teal: distinct from the orange menu highlight
+
+def _wrap_cells(text, w):
+    """Split text into rows of at most w display cells, breaking at a space
+    when one is available (East-Asian width aware)."""
+    rows, cur, cw = [], "", 0
+    for ch in text:
+        cc = _width(ch)
+        if cw + cc > w:
+            cut = cur.rfind(" ")
+            if cut > 0:
+                rows.append(cur[:cut]); cur = cur[cut + 1:]
+            else:
+                rows.append(cur); cur = ""
+            cw = _width(cur)
+        cur += ch; cw += cc
+    rows.append(cur)
+    return rows
+
+def turn_head(question, mode="ask", scope=None):
+    """The band above a turn: a solid colored block, every row padded to the
+    terminal width so a long question stays one block. mode: ask | reason | summarize."""
+    where = f" ({scope})" if scope else ""
+    w = term_width()
+    if not _COLOR:
+        return f"== {mode}{where}: {question}"
+    rows = _wrap_cells(f" {mode}{where} \u203a {question}", w - 1)
+    return "\n".join(BAND + r + " " * (w - _width(r)) + RESET for r in rows)
+
+def answer_rule(label="answer", est_tokens=None):
+    """The rule where the answer starts, with the context estimate."""
+    w = term_width()
+    note = ""
+    if est_tokens:
+        note = f"about {est_tokens:,} tokens in, {est_tokens * 100 // 32768}% of 32k"
+    text = f"\u2500\u2500 {label}" + (f" \u00b7 {note} " if note else " ")
+    return MENU_CMD + text + "\u2500" * max(0, w - _width(text)) + RESET
+
+def warn_line(w):
+    color = FAIL_COLOR if w.startswith(FAIL_WARNINGS) else WARN_COLOR
+    return f"{color}!!  {w}{RESET}"
+
+def sources_block(hits, scored=True):
+    out = [f"{DIM}\u2500\u2500 sources{RESET}"]
+    for i, h in enumerate(hits, 1):
+        s, cs, c = h if scored else (None, None, h)
+        extra = ""
+        if scored:
+            extra = f"  {DIM}(bm25 {s:.2f}" + (f", cos {cs:.2f}" if cs is not None else "") + f"){RESET}"
+        out.append(f"{DIM}[S{i}]{RESET} {c['file']} > {c['heading'] or '(no heading)'}{extra}")
+    return "\n".join(out)
+
+def context_line(usage, think_tokens=None):
+    if not usage:
+        return f"{DIM}\u2500\u2500 context: usage not reported by the server{RESET}"
+    pt = usage.get("prompt_tokens") or 0
+    ct = usage.get("completion_tokens") or 0
+    think = f" (thinking {think_tokens:,} of the {ct:,})" if think_tokens else ""
+    return (f"{DIM}\u2500\u2500 context: {pt:,} prompt + {ct:,} answer{think} = {pt+ct:,} / 32,768 "
+            f"({(pt+ct)*100//32768}%){RESET}")
 
 def chat_help_text():
     rows = [(f"/{n} {a}".strip(), h) for n, a, h, _ in CHAT_COMMANDS]
@@ -1544,9 +1627,17 @@ class ChatState:
                 f"diverse {'on' if self.diverse else 'off'} | "
                 f"think {'on' if self.show_thinking else 'off'}")
 
-def chat_command(state, line):
+def erase_typed_rows(prompt, line):
+    """Move up over the rows the submitted line took and clear them, so the
+    question band replaces the typed line instead of repeating it."""
+    rows = max(1, (_width(prompt + line) - 1) // term_width() + 1)
+    sys.stdout.write(f"\x1b[{rows}A\r\x1b[J")
+    sys.stdout.flush()
+
+def chat_command(state, line, erase=None):
     """Run one '/' command against the state. Returns (keep_going, text).
-    Pure apart from /matter and /reingest, which touch the index on disk."""
+    Pure apart from /matter and /reingest, which touch the index on disk, and
+    /reason, which runs a turn (erase() is called first when given)."""
     body = line[1:].strip()
     name, _, arg = body.partition(" ")
     cmd = CHAT_ALIASES.get(name.lower(), name.lower())
@@ -1560,6 +1651,8 @@ def chat_command(state, line):
     if cmd == "reason":
         if not arg:
             return True, "usage: /reason <question>   (thinks first; slower, lower trust than a plain question)"
+        if erase:
+            erase()
         try:
             reason(state.matter, arg, state.top_k, state.min_score, only=state.scope,
                    batch="chat", dense_min=state.dense_min, diverse=True,
@@ -2018,6 +2111,8 @@ def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
     while True:
         try:
             line = editor.read(state.prompt()) if editor else input(state.prompt())
+            if not editor and not sys.stdin.isatty():
+                print()                      # piped input echoes nothing; end the prompt line
         except EOFError:
             line = None
         except KeyboardInterrupt:
@@ -2034,7 +2129,8 @@ def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
         if line.startswith("/"):
             before = state.matter
             try:
-                go, text = chat_command(state, line)
+                go, text = chat_command(state, line,
+                                        erase=(lambda: erase_typed_rows(state.prompt(), line)) if editor else None)
             except KeyboardInterrupt:
                 print("\n(interrupted)")
                 continue
@@ -2047,6 +2143,7 @@ def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
             continue
 
         q_only, q_tk, q_dv = state.scope, state.top_k, state.diverse
+        typed = line
         if "::" in line:
             flagstr, _, line = line.partition("::")
             line = line.strip()
@@ -2058,6 +2155,8 @@ def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
                 print(f"bad flag: {e}")
                 continue
         try:
+            if editor:
+                erase_typed_rows(state.prompt(), typed)
             ask(state.matter, line, q_tk, state.min_score, only=q_only, batch="chat",
                 dense_min=state.dense_min, diverse=q_dv)
         except KeyboardInterrupt:
@@ -2150,9 +2249,8 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
               "sources, copy numbers exactly, and end every bullet with its [S#] citation.")
     on_token = None
     if not quiet:
-        print(f"Summary of matter '{matter}'"
-              + (f" (only {only})" if only else "")
-              + f" from {len(selected)} of {total} chunks:\n")
+        print(turn_head(f"summary of {matter} from {len(selected)} of {total} chunks", "summarize", only))
+        print(answer_rule("summary", estimate_tokens(SUMMARY_SYSTEM, user)))
         def on_token(t):
             sys.stdout.write(t); sys.stdout.flush()
     t0 = time.time()
@@ -2176,15 +2274,10 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
              "config": run_config(chat_model, emb_model, len(selected), 0.0, dense_min, False)}
     _log(matter, audit)
     if not quiet:
-        print("\n--- Sources ---")
-        for i, c in enumerate(selected, 1):
-            print(f"[S{i}] {c['file']} > {c['heading'] or '(no heading)'}")
+        print("\n" + sources_block(selected, scored=False))
         for w in warnings:
-            print(f"!!  {w}")
-        if usage:
-            pt = usage.get("prompt_tokens") or 0
-            ct = usage.get("completion_tokens") or 0
-            print(f"--- Context: {pt:,} prompt + {ct:,} answer = {pt+ct:,} / 32,768 ({(pt+ct)*100//32768}%) ---")
+            print(warn_line(w))
+        print(context_line(usage) + "\n")
     if out:
         with open(out, "w", encoding="utf-8") as f:
             f.write(summary + "\n\n--- Sources ---\n")
@@ -2527,6 +2620,25 @@ def selftest(min_score):
     check("cap_citations: one or two citations are left untouched",
           cap_citations("- Alpha quoted $4,800 [S1][S3].") == "- Alpha quoted $4,800 [S1][S3].")
 
+    # turn display: band, rule, warnings, estimate
+    long_q = "word " * 60
+    head = turn_head(long_q.strip(), "ask", "firm-alpha")
+    check("display: the question band pads every row to the width and breaks at spaces",
+          all(_width(re.sub(r"\x1b\[[0-9;]*m", "", r)) == term_width() for r in head.split("\n"))
+          and len(head.split("\n")) >= 2 and not any(r.endswith("wor" + RESET) for r in head.split("\n"))
+          and "ask (firm-alpha)" in head)
+    check("display: the answer rule carries the estimate, the estimate is about 4 chars per token",
+          "about 1,000 tokens in, 3% of 32k" in answer_rule("answer", 1000)
+          and estimate_tokens("a" * 4000, "b" * 400) == 1100)
+    check("display: fail warnings are red, check warnings are yellow",
+          warn_line("TRUNCATED: x").startswith(FAIL_COLOR) and warn_line("LOOP: x").startswith(FAIL_COLOR)
+          and warn_line("UNVERIFIED NUMBER: 9").startswith(WARN_COLOR))
+    check("display: sources block lists every hit with its label",
+          "[S2]" in sources_block([(1.0, None, {"file": "a.md", "heading": "h"}), (0.5, 0.4, {"file": "b.md", "heading": ""})])
+          and "(no heading)" in sources_block([{"file": "b.md", "heading": ""}], scored=False))
+    check("display: context line reports prompt, answer and thinking tokens",
+          "1,000 prompt + 200 answer (thinking 150 of the 200) = 1,200" in context_line({"prompt_tokens": 1000, "completion_tokens": 200}, 150))
+
     # reason mode: the thinking switch is per request, never the LM Studio toggle
     check("payload: extraction and summary send reasoning_effort=none",
           build_payload("s", "u", "m")["reasoning_effort"] == "none"
@@ -2549,6 +2661,8 @@ def selftest(min_score):
     check("reason: the user message ends with the reason tail, ask keeps its own",
           sources_prompt([], "q", tail=REASON_TAIL).endswith(REASON_TAIL + "\nQuestion: q")
           and sources_prompt([], "q").endswith(ASK_TAIL + "\nQuestion: q"))
+    check("display: a NO THINKING warning is red",
+          warn_line("NO THINKING: x").startswith(FAIL_COLOR))
     check("reason: a computed answer without [INFERENCE] is flagged, a labeled one passes",
           verify_inference_labels("$19,500 - $3,000 = $16,500 [S1].") != []
           and verify_inference_labels("$19,500 - $3,000 = $16,500 [INFERENCE].") == []
