@@ -17,7 +17,7 @@ a same-stem sidecar; coverage names any file that is still not indexed.
 """
 import argparse, hashlib, json, math, os, re, sys, time, urllib.request, urllib.error
 import zipfile, tempfile, xml.etree.ElementTree as ET
-import shutil, subprocess, html, email, email.policy, email.utils, email.header
+import shutil, subprocess, html, email, email.policy, email.utils, email.header, unicodedata
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 SERVER = "http://127.0.0.1:1234/v1"
@@ -1212,108 +1212,621 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
     print(f"audit: {os.path.relpath(audit_path(matter), BASE)} (lines tagged batch={tag})")
 
 # ---------------- chat ----------------
+#
+# Layout of this section:
+#   CHAT_COMMANDS   one table drives the menu, /help, completion, the README check
+#   ChatState       the session (matter, scope, knobs) + prompt text
+#   chat_command()  pure dispatcher: (state, line) -> (keep_going, text)
+#   chat_menu()     pure menu model: (buffer, state) -> rows
+#   LineEditor      raw-mode editor: history, menu above the prompt, paste
+#   chat()          the loop; falls back to input() when not on a terminal
+
+CHAT_COMMANDS = [
+    # name, argument placeholder, help line, argument completer
+    ("scope",    "[folder]",       "answer only from this folder; no folder = whole matter", "folders"),
+    ("folders",  "",               "list the folders under docs/ and what is indexed",       None),
+    ("matter",   "<name>",         "switch matter (reloads its index, clears the scope)",     "matters"),
+    ("matters",  "",               "list the matters",                                       None),
+    ("reingest", "",               "convert new files, rebuild the index, show coverage",    None),
+    ("set",      "<key> <value>",  "top-k | min-score | dense-min",                          "keys"),
+    ("diverse",  "[on|off]",       "diverse retrieval; no value toggles",                    None),
+    ("show",     "",               "print the current settings",                             None),
+    ("help",     "",               "list these commands",                                    None),
+    ("exit",     "",               "leave (Ctrl-D also exits)",                              None),
+]
+CHAT_ALIASES = {"quit": "exit", "only": "scope"}
+HISTORY_FILE = "chat-history.txt"   # per matter, under audit/ (git-ignored for real matters)
+HISTORY_MAX = 500
+MENU_MAX_ROWS = 10
+# Menu colors (ANSI). The highlight is black on an orange band so the menu does
+# not blend into the transcript; NO_COLOR (https://no-color.org) falls back to
+# reverse video. 256-color codes render in Terminal, iTerm2 and xterm.js.
+_COLOR = not os.environ.get("NO_COLOR")
+MENU_HL = "\x1b[30;48;5;215m" if _COLOR else "\x1b[7m"   # highlighted row
+MENU_CMD = "\x1b[38;5;81m" if _COLOR else ""              # command name column
+MENU_DIM = "\x1b[2m"                                       # help text, hint line
+RESET = "\x1b[0m"
+
+def chat_help_text():
+    rows = [(f"/{n} {a}".strip(), h) for n, a, h, _ in CHAT_COMMANDS]
+    w = max(len(r[0]) for r in rows)
+    return ("commands (a line starting with '/' is a command, anything else is a question):\n"
+            + "\n".join(f"  {c.ljust(w)}  {h}" for c, h in rows)
+            + "\nkeys: / opens the menu, up/down move, tab fills, enter runs, esc closes,"
+              " up recalls the last line\n"
+              "one-off override: prefix a question with '--only X --top-k N --diverse ::'")
+
+def matters_list():
+    root = os.path.join(BASE, "matters")
+    if not os.path.isdir(root):
+        return []
+    return sorted(m for m in os.listdir(root)
+                  if not m.startswith(".") and os.path.isdir(os.path.join(root, m, "docs")))
+
+def docs_folders(matter, index=None):
+    """Every folder under docs/ that holds files: [(folder, indexed, skipped, new)].
+    '' is the docs root. 'new' = readable files the index has not seen yet."""
+    docs = os.path.join(matter_dir(matter), "docs")
+    indexed = set((index or {}).get("files") or {})
+    skipped = {s["file"] for s in (index or {}).get("skipped") or []}
+    out = []
+    for root, dirs, names in os.walk(docs):
+        dirs[:] = sorted(d for d in dirs if not _hidden(d))
+        files = [n for n in names if not _hidden(n)]
+        if not files:
+            continue
+        rel = os.path.relpath(root, docs)
+        rel = "" if rel == "." else rel
+        rels = [os.path.join(rel, n) if rel else n for n in files]
+        new = sum(1 for r in rels if r.lower().endswith(INGEST_EXTS) and r not in indexed)
+        out.append((rel, sum(r in indexed for r in rels), sum(r in skipped for r in rels), new))
+    return sorted(out)
+
+def _folder_note(indexed, skipped, new):
+    parts = [f"{indexed} indexed"]
+    if skipped:
+        parts.append(f"{skipped} skipped")
+    if new:
+        parts.append(f"{new} new (run /reingest)")
+    return ", ".join(parts)
+
+def load_history(matter):
+    p = os.path.join(matter_dir(matter), "audit", HISTORY_FILE)
+    if not os.path.exists(p):
+        return []
+    with open(p, encoding="utf-8") as f:
+        return [l.rstrip("\n") for l in f if l.strip()][-HISTORY_MAX:]
+
+def append_history(matter, line):
+    d = os.path.join(matter_dir(matter), "audit")
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, HISTORY_FILE)
+    lines = load_history(matter)
+    if lines and lines[-1] == line:
+        return
+    lines.append(line)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines[-HISTORY_MAX:]) + "\n")
+
+class ChatState:
+    """One chat session. scope=None means the whole matter."""
+    def __init__(self, matter, top_k=5, min_score=1.0, only=None, dense_min=0.5, diverse=False):
+        self.matter, self.top_k, self.min_score = matter, top_k, min_score
+        self.scope, self.dense_min, self.diverse = only, dense_min, diverse
+        self.index, self.files = None, []
+        self.load()
+
+    def load(self):
+        self.index = load_index(self.matter)
+        self.files = sorted({c["file"] for c in self.index["chunks"]})
+
+    def has_scope(self, folder):
+        return any(f.startswith(folder) for f in self.files)
+
+    def prompt(self):
+        return f"{self.matter}/{self.scope} > " if self.scope else f"{self.matter} > "
+
+    def show(self):
+        return (f"matter: {self.matter} | scope: {self.scope or 'whole matter'} | "
+                f"top-k {self.top_k} | min-score {self.min_score} | dense-min {self.dense_min} | "
+                f"diverse {'on' if self.diverse else 'off'}")
+
+def chat_command(state, line):
+    """Run one '/' command against the state. Returns (keep_going, text).
+    Pure apart from /matter and /reingest, which touch the index on disk."""
+    body = line[1:].strip()
+    name, _, arg = body.partition(" ")
+    cmd = CHAT_ALIASES.get(name.lower(), name.lower())
+    arg = arg.strip()
+    if cmd == "exit":
+        return False, ""
+    if cmd == "help":
+        return True, chat_help_text()
+    if cmd == "show":
+        return True, state.show()
+    if cmd == "scope":
+        if not arg:
+            state.scope = None
+            return True, f"scope: whole matter ({state.matter})"
+        folder = arg.strip("/")
+        if not state.has_scope(folder):
+            return True, f"no indexed files under '{folder}/' (scope unchanged); try /folders"
+        state.scope = folder
+        return True, f"scope: {state.matter}/{folder}"
+    if cmd == "folders":
+        rows = docs_folders(state.matter, state.index)
+        if not rows:
+            return True, "no files under docs/"
+        w = max(len(r[0] or "(root)") for r in rows)
+        out = [f"folders in {state.matter}/docs (scope with /scope <folder>):"]
+        for f, i, s, n in rows:
+            mark = " <- scope" if state.scope and f == state.scope else ""
+            out.append(f"  {(f or '(root)').ljust(w)}  {_folder_note(i, s, n)}{mark}")
+        return True, "\n".join(out)
+    if cmd == "matters":
+        ms = matters_list()
+        return True, "matters:\n" + "\n".join(
+            f"  {m}{'  <- current' if m == state.matter else ''}" for m in ms)
+    if cmd == "matter":
+        if not arg:
+            return True, f"matter: {state.matter} (use /matter <name>; see /matters)"
+        if arg not in matters_list():
+            return True, f"no such matter '{arg}'; see /matters"
+        old = state.matter
+        state.matter = arg
+        try:
+            state.load()
+        except SystemExit as e:
+            state.matter = old
+            state.load()
+            return True, f"!!  {e.code}"
+        state.scope = None
+        return True, f"matter: {arg} ({len(state.files)} files); scope: whole matter"
+    if cmd == "reingest":
+        try:
+            ingest(state.matter)
+        except SystemExit as e:
+            return True, f"!!  {e.code}"
+        state.load()
+        if state.scope and not state.has_scope(state.scope):
+            state.scope = None
+            return True, "index rebuilt; the old scope folder is gone, scope: whole matter"
+        return True, f"index: {len(state.files)} files, {len(state.index['chunks'])} chunks"
+    if cmd == "set":
+        parts = arg.split()
+        if len(parts) != 2:
+            return True, "usage: /set <top-k|min-score|dense-min> <value>"
+        key, val = parts[0].lower(), parts[1]
+        try:
+            if key == "top-k":
+                state.top_k = int(val)
+            elif key == "min-score":
+                state.min_score = float(val)
+            elif key == "dense-min":
+                state.dense_min = float(val)
+            else:
+                return True, f"unknown key {key!r} (top-k | min-score | dense-min)"
+        except ValueError:
+            return True, f"bad value {val!r} for {key}"
+        return True, state.show()
+    if cmd == "diverse":
+        a = arg.lower()
+        if not a:
+            state.diverse = not state.diverse
+        elif a in ("on", "true", "yes"):
+            state.diverse = True
+        elif a in ("off", "false", "no"):
+            state.diverse = False
+        else:
+            return True, "usage: /diverse [on|off]"
+        return True, f"diverse: {'on' if state.diverse else 'off'}"
+    return True, f"unknown command '/{name}' (try /help)"
+
+def chat_menu(buffer, state):
+    """Rows for the menu above the prompt: [(label, fill, help)]. label is what
+    the row shows, fill is the buffer text after accepting it (a trailing space
+    means 'now type the argument'). Empty list = no menu."""
+    if not buffer.startswith("/"):
+        return []
+    body = buffer[1:]
+    if " " not in body:
+        pfx = body.lower()
+        return [(f"/{n}", f"/{n} " if a else f"/{n}", (f"{a}  " if a else "") + h)
+                for n, a, h, _ in CHAT_COMMANDS if n.startswith(pfx)]
+    name, _, arg = body.partition(" ")
+    cmd = CHAT_ALIASES.get(name.lower(), name.lower())
+    spec = next((c for c in CHAT_COMMANDS if c[0] == cmd), None)
+    if not spec or not spec[3]:
+        return []
+    arg = arg.strip().lower()
+    if spec[3] == "folders":
+        rows = [] if arg else [(f"/{cmd}", f"/{cmd}", "whole matter (clear the scope)")]
+        for f, i, s, n in docs_folders(state.matter, state.index):
+            if f and f.lower().startswith(arg):
+                rows.append((f"/{cmd} {f}", f"/{cmd} {f}", _folder_note(i, s, n)))
+        return rows
+    if spec[3] == "matters":
+        return [(f"/{cmd} {m}", f"/{cmd} {m}", "current" if m == state.matter else "")
+                for m in matters_list() if m.lower().startswith(arg)]
+    if spec[3] == "keys":
+        keys = (("top-k", str(state.top_k)), ("min-score", str(state.min_score)),
+                ("dense-min", str(state.dense_min)))
+        return [(f"/{cmd} {k} <value>", f"/{cmd} {k} ", f"now {v}")
+                for k, v in keys if k.startswith(arg.split()[0] if arg else "")]
+    return []
+
+# ---- terminal line editor (stdlib only) ----
+
+def _width(s):
+    """Display width: East Asian wide/fullwidth = 2, combining marks = 0."""
+    return sum(0 if unicodedata.combining(ch) else
+               2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in s)
+
+def _clip(s, w):
+    out, used = [], 0
+    for ch in s:
+        cw = _width(ch)
+        if used + cw > w:
+            break
+        out.append(ch)
+        used += cw
+    return "".join(out)
+
+_KEY_SEQ = {"[A": "up", "OA": "up", "[B": "down", "OB": "down", "[C": "right", "OC": "right",
+            "[D": "left", "OD": "left", "[H": "home", "OH": "home", "[1~": "home", "[7~": "home",
+            "[F": "end", "OF": "end", "[4~": "end", "[8~": "end", "[3~": "del", "[Z": "backtab",
+            "b": "word-left", "f": "word-right", "[1;5D": "word-left", "[1;5C": "word-right"}
+_KEY_CTRL = {1: "home", 2: "left", 4: "eof", 5: "end", 6: "right", 11: "kill-end", 12: "clear",
+             14: "down", 16: "up", 21: "kill-line", 23: "kill-word", 3: "intr", 9: "tab",
+             13: "enter", 10: "enter", 8: "bs", 127: "bs"}
+
+class LineEditor:
+    """Minimal raw-mode line editor. Up/down walk history; while the buffer
+    starts with '/' a menu is drawn ABOVE the prompt and up/down move its
+    highlight, tab fills the row, enter runs it, esc closes it. Bracketed
+    paste folds a multi-line paste into one line. Keys and output are
+    injectable so selftest can drive it without a terminal."""
+
+    def __init__(self, menu_fn, history=None, keys=None, out=None, width=None):
+        self.menu_fn = menu_fn
+        self.history = list(history or [])
+        self._keys = iter(keys) if keys is not None else None
+        self.out = out or (lambda s: (sys.stdout.write(s), sys.stdout.flush()))
+        self.width_fn = width or (lambda: shutil.get_terminal_size((80, 24)).columns)
+        self.buf, self.pos = "", 0
+        self.hist_i, self.stash = None, ""
+        self.sel, self.view, self.menu_closed = 0, 0, False
+        self.menu, self.cursor_row = [], 0
+        self._last_buf = None
+        self._pushback = b""
+
+    # -- key input --
+    def _fill(self, fd, timeout=0.05):
+        """Pull whatever bytes are already waiting (a burst from key repeat, or
+        the rest of an escape sequence) into the pushback buffer."""
+        import select
+        r, _, _ = select.select([fd], [], [], timeout)
+        if r:
+            self._pushback += os.read(fd, 4096)
+        return bool(self._pushback)
+
+    def _byte(self, fd):
+        if not self._pushback:
+            self._pushback = os.read(fd, 1)
+        if not self._pushback:
+            return None
+        b, self._pushback = self._pushback[:1], self._pushback[1:]
+        return b
+
+    def _read_key(self):
+        """One key as a symbol ('up', 'enter', 'paste:<text>' ...) or a
+        printable string. Parses one escape sequence at a time so a burst of
+        keys is never swallowed; leftover bytes wait in the pushback buffer."""
+        if self._keys is not None:
+            try:
+                return next(self._keys)
+            except StopIteration:
+                return "eof"
+        fd = sys.stdin.fileno()
+        ch = self._byte(fd)
+        if ch is None:
+            return "eof"
+        b = ch[0]
+        if b == 0x1b:
+            if not self._pushback and not self._fill(fd):
+                return "esc"
+            nxt = self._byte(fd)
+            if nxt == b"[":
+                seq = b"["
+                while True:                       # CSI: parameters, then a final byte 0x40-0x7E
+                    c = self._byte(fd)
+                    if c is None:
+                        break
+                    seq += c
+                    if 0x40 <= c[0] <= 0x7e:
+                        break
+                if seq == b"[200~":
+                    data = b""
+                    while b"\x1b[201~" not in data:
+                        more = self._pushback or os.read(fd, 4096)
+                        self._pushback = b""
+                        if not more:
+                            break
+                        data += more
+                    text, _, rest = data.partition(b"\x1b[201~")
+                    self._pushback = rest + self._pushback
+                    return "paste:" + text.decode("utf-8", "replace")
+                return _KEY_SEQ.get(seq.decode("latin-1"), "ignore")
+            if nxt == b"O":
+                c = self._byte(fd) or b""
+                return _KEY_SEQ.get("O" + c.decode("latin-1"), "ignore")
+            if nxt == b"\x1b":                     # two ESCs: the first stands alone
+                self._pushback = b"\x1b" + self._pushback
+                return "esc"
+            return _KEY_SEQ.get((nxt or b"").decode("latin-1"), "ignore")   # alt+key
+        if b in _KEY_CTRL:
+            return _KEY_CTRL[b]
+        if b < 32:
+            return "ignore"
+        n = 1 if b < 0x80 else 2 if b >> 5 == 6 else 3 if b >> 4 == 14 else 4
+        data = ch
+        for _ in range(n - 1):
+            data += self._byte(fd) or b""
+        return data.decode("utf-8", "replace")
+
+    # -- drawing --
+    def _render(self, prompt, final=False):
+        cols = max(20, self.width_fn())
+        if self.buf != self._last_buf:
+            self.sel, self.view, self.menu_closed = 0, 0, False
+            self._last_buf = self.buf
+        self.menu = [] if (self.menu_closed or final) else self.menu_fn(self.buf)
+        lines = []
+        if self.menu:
+            self.sel = min(self.sel, len(self.menu) - 1)
+            if self.sel < self.view:
+                self.view = self.sel
+            if self.sel >= self.view + MENU_MAX_ROWS:
+                self.view = self.sel - MENU_MAX_ROWS + 1
+            rows = self.menu[self.view:self.view + MENU_MAX_ROWS]
+            w = max(_width(r[0]) for r in self.menu)
+            for i, (label, _, help_) in enumerate(rows, start=self.view):
+                name = " " + label + " " * (w - _width(label)) + "  "
+                text = _clip(name + help_, cols - 1)
+                if i == self.sel:
+                    text = MENU_HL + text + " " * (cols - 1 - _width(text)) + RESET
+                else:
+                    text = MENU_CMD + text[:len(name)] + RESET + MENU_DIM + text[len(name):] + RESET
+                lines.append(text)
+            more = len(self.menu) - len(rows)
+            hint = "up/down move  tab fill  enter run  esc close" + (f"  ({more} more)" if more else "")
+            lines.append(MENU_DIM + _clip(hint, cols - 1) + RESET)
+        text = prompt + self.buf
+        n = _width(text)
+        out = "\r" + (f"\x1b[{self.cursor_row}A" if self.cursor_row else "") + "\x1b[J"
+        out += "".join(l + "\n" for l in lines) + text
+        if n and n % cols == 0:
+            out += "\n"                          # force the wrap instead of a pending one
+        end_row = n // cols
+        cpos = _width(prompt + self.buf[:self.pos])
+        crow, ccol = cpos // cols, cpos % cols
+        if not final:                            # a finished line leaves the cursor at its end
+            out += "\r" + (f"\x1b[{end_row - crow}A" if end_row > crow else "")
+            out += f"\x1b[{ccol}C" if ccol else ""
+        self.cursor_row = len(lines) + (end_row if final else crow)
+        self.out(out)
+
+    # -- editing helpers --
+    def _insert(self, s):
+        self.buf = self.buf[:self.pos] + s + self.buf[self.pos:]
+        self.pos += len(s)
+
+    def _hist(self, step):
+        if not self.history:
+            return
+        if self.hist_i is None:
+            self.stash, self.hist_i = self.buf, len(self.history)
+        i = self.hist_i + step
+        if i < 0 or i > len(self.history):
+            return
+        self.hist_i = i
+        self.buf = self.history[i] if i < len(self.history) else self.stash
+        self.pos = len(self.buf)
+        if self.hist_i == len(self.history):
+            self.hist_i = None
+
+    def _word_left(self):
+        i = self.pos
+        while i > 0 and self.buf[i - 1] == " ":
+            i -= 1
+        while i > 0 and self.buf[i - 1] != " ":
+            i -= 1
+        return i
+
+    def _word_right(self):
+        i, n = self.pos, len(self.buf)
+        while i < n and self.buf[i] != " ":
+            i += 1
+        while i < n and self.buf[i] == " ":
+            i += 1
+        return i
+
+    def _finish(self, prompt):
+        self._render(prompt, final=True)
+        self.out("\n")
+        self.cursor_row = 0
+        line = self.buf
+        self.buf, self.pos, self.hist_i, self._last_buf = "", 0, None, None
+        return line
+
+    # -- main entry --
+    def read(self, prompt):
+        """Read one line. Returns the text, or None on Ctrl-D with an empty line."""
+        if self._keys is None:
+            import termios
+            fd = sys.stdin.fileno()
+            saved = termios.tcgetattr(fd)
+            attrs = termios.tcgetattr(fd)
+            attrs[3] &= ~(termios.ECHO | termios.ICANON | termios.ISIG | termios.IEXTEN)
+            attrs[0] &= ~(termios.IXON | termios.ICRNL)
+            attrs[6][termios.VMIN], attrs[6][termios.VTIME] = 1, 0
+            termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+            self.out("\x1b[?2004h")
+            try:
+                return self._loop(prompt)
+            finally:
+                self.out("\x1b[?2004l")
+                termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        return self._loop(prompt)
+
+    def _loop(self, prompt):
+        self.cursor_row = 0
+        while True:
+            self._render(prompt)
+            k = self._read_key()
+            menu = self.menu
+            if k == "enter":
+                if menu and self.buf.strip() != menu[self.sel][0]:
+                    self.buf = menu[self.sel][1]
+                    self.pos = len(self.buf)
+                    if self.buf.endswith(" "):
+                        continue                 # argument menu comes next
+                line = self._finish(prompt)
+                if line.strip() and (not self.history or self.history[-1] != line):
+                    self.history.append(line)
+                return line
+            elif k == "tab":
+                if menu:
+                    self.buf = menu[self.sel][1]
+                    self.pos = len(self.buf)
+                    self._last_buf = self.buf     # keep the highlight on the filled row
+            elif k in ("up", "backtab"):
+                if menu:
+                    self.sel = (self.sel - 1) % len(menu)
+                else:
+                    self._hist(-1)
+            elif k == "down":
+                if menu:
+                    self.sel = (self.sel + 1) % len(menu)
+                else:
+                    self._hist(+1)
+            elif k == "esc":
+                if menu:
+                    self.menu_closed = True
+            elif k == "eof":
+                if not self.buf:
+                    self._finish(prompt)
+                    return None
+            elif k == "intr":
+                self.buf, self.pos, self.hist_i = "", 0, None
+                self.menu_closed = True
+                self._render(prompt, final=True)
+                self.out("^C\n")
+                self.cursor_row = 0
+                self._last_buf = None
+            elif k == "bs":
+                if self.pos:
+                    self.buf = self.buf[:self.pos - 1] + self.buf[self.pos:]
+                    self.pos -= 1
+            elif k == "del":
+                self.buf = self.buf[:self.pos] + self.buf[self.pos + 1:]
+            elif k == "left":
+                self.pos = max(0, self.pos - 1)
+            elif k == "right":
+                self.pos = min(len(self.buf), self.pos + 1)
+            elif k == "home":
+                self.pos = 0
+            elif k == "end":
+                self.pos = len(self.buf)
+            elif k == "word-left":
+                self.pos = self._word_left()
+            elif k == "word-right":
+                self.pos = self._word_right()
+            elif k == "kill-line":
+                self.buf, self.pos = "", 0
+            elif k == "kill-end":
+                self.buf = self.buf[:self.pos]
+            elif k == "kill-word":
+                i = self._word_left()
+                self.buf, self.pos = self.buf[:i] + self.buf[self.pos:], i
+            elif k == "clear":
+                self.out("\x1b[2J\x1b[H")
+                self.cursor_row = 0
+            elif k.startswith("paste:"):
+                parts = k[6:].replace("\r", "\n").split("\n")
+                self._insert(" ".join(x.strip() for x in parts if x.strip()))
+            elif k == "ignore":
+                pass
+            elif len(k) == 1 or (k and k.isprintable()):
+                self._insert(k)
 
 def chat(matter, top_k, min_score, only=None, dense_min=0.5, diverse=False):
-    """Interactive REPL. Each question runs one grounded, audited ask(); the
-    pipeline is unchanged. Backslash commands change the session defaults that
-    carry to the next line. A '<flags> ::' prefix overrides a single line, via
-    the SAME parser as batch. No answer is carried between turns yet (that is
-    the next step); every turn is retrieved and gated on its own."""
-    index = load_index(matter)                       # fail fast if the matter has no index
-    files = sorted({c["file"] for c in index["chunks"]})
-
-    def show():
-        print(f"matter: {matter} | top-k {top_k} | min-score {min_score} | "
-              f"dense-min {dense_min} | only {only or '(none)'} | "
-              f"diverse {'on' if diverse else 'off'}")
-
-    HELP = (
-        "commands (a line starting with '\\' is a command, anything else is a question):\n"
-        "  \\show                print current settings\n"
-        "  \\set <key> <value>   key = top-k | min-score | dense-min\n"
-        "  \\only [folder]       limit search to a subfolder; no arg clears it\n"
-        "  \\diverse [on|off]    diverse retrieval; no arg toggles\n"
-        "  \\help                this list\n"
-        "  \\exit                leave (Ctrl-D also exits)\n"
-        "one-off override: prefix a question with '--only X --top-k N --diverse ::'")
-
-    show()
-    print("Type a question, or \\help for commands.")
+    """Interactive session. Each question runs one grounded, audited ask();
+    the pipeline is unchanged. '/' commands change the session state that
+    carries to the next line; a '<flags> ::' prefix overrides a single line
+    via the SAME parser as batch. No answer is carried between turns; every
+    turn is retrieved and gated on its own."""
+    state = ChatState(matter, top_k, min_score, only, dense_min, diverse)
+    interactive = sys.stdin.isatty() and sys.stdout.isatty() and os.name != "nt"
+    editor = LineEditor(lambda buf: chat_menu(buf, state),
+                        history=load_history(state.matter)) if interactive else None
+    if not interactive:
+        try:
+            import readline
+            for h in load_history(state.matter):
+                readline.add_history(h)
+        except ImportError:
+            pass
+    print(state.show())
+    print("Type a question, or / for commands (up arrow recalls the last line).")
     while True:
         try:
-            line = input("\n> ").strip()
+            line = editor.read(state.prompt()) if editor else input(state.prompt())
         except EOFError:
+            line = None
+        except KeyboardInterrupt:
+            print("\n(use /exit to quit)")
+            continue
+        if line is None:
             print()
             break
-        except KeyboardInterrupt:
-            print("\n(use \\exit to quit)")
-            continue
+        line = line.strip()
         if not line:
             continue
+        append_history(state.matter, line)
 
-        if line.startswith("\\"):
-            parts = line[1:].split()
-            cmd = parts[0].lower() if parts else ""
-            args = parts[1:]
-            if cmd in ("exit", "quit"):
+        if line.startswith("/"):
+            before = state.matter
+            try:
+                go, text = chat_command(state, line)
+            except KeyboardInterrupt:
+                print("\n(interrupted)")
+                continue
+            if text:
+                print(text)
+            if not go:
                 break
-            elif cmd == "help":
-                print(HELP)
-            elif cmd == "show":
-                show()
-            elif cmd == "only":
-                if args and not any(f.startswith(args[0]) for f in files):
-                    print(f"no indexed files under '{args[0]}/' (only unchanged)")
-                else:
-                    only = args[0] if args else None
-                    print(f"only: {only or '(none)'}")
-            elif cmd == "diverse":
-                if not args:
-                    diverse = not diverse
-                elif args[0].lower() in ("on", "true", "yes"):
-                    diverse = True
-                elif args[0].lower() in ("off", "false", "no"):
-                    diverse = False
-                else:
-                    print("usage: \\diverse [on|off]"); continue
-                print(f"diverse: {'on' if diverse else 'off'}")
-            elif cmd == "set":
-                if len(args) != 2:
-                    print("usage: \\set <top-k|min-score|dense-min> <value>"); continue
-                key, val = args[0].lower(), args[1]
-                try:
-                    if key == "top-k":
-                        top_k = int(val)
-                    elif key == "min-score":
-                        min_score = float(val)
-                    elif key == "dense-min":
-                        dense_min = float(val)
-                    else:
-                        print(f"unknown key {key!r} (top-k | min-score | dense-min)"); continue
-                except ValueError:
-                    print(f"bad value {val!r} for {key}"); continue
-                show()
-            else:
-                print(f"unknown command '\\{cmd}' (try \\help)")
+            if editor and state.matter != before:
+                editor.history = load_history(state.matter)
             continue
 
-        q_only, q_tk, q_dv = only, top_k, diverse       # one-off override, shared with batch
+        q_only, q_tk, q_dv = state.scope, state.top_k, state.diverse
         if "::" in line:
             flagstr, _, line = line.partition("::")
             line = line.strip()
             if not line:
                 continue
             try:
-                q_only, q_tk, q_dv = parse_line_overrides(flagstr, only, top_k, diverse)
+                q_only, q_tk, q_dv = parse_line_overrides(flagstr, state.scope, state.top_k, state.diverse)
             except ValueError as e:
-                print(f"bad flag: {e}"); continue
-
+                print(f"bad flag: {e}")
+                continue
         try:
-            ask(matter, line, q_tk, min_score, only=q_only, batch="chat",
-                dense_min=dense_min, diverse=q_dv)
+            ask(state.matter, line, q_tk, state.min_score, only=q_only, batch="chat",
+                dense_min=state.dense_min, diverse=q_dv)
         except KeyboardInterrupt:
             print("\n(interrupted)")
-        except SystemExit as e:                          # ask() exits on server-down / bad --only; keep the REPL alive
+        except SystemExit as e:                          # ask() exits on server-down / bad scope; keep the REPL alive
             if e.code:
                 print(f"!!  {e.code}")
         except (urllib.error.URLError, OSError) as e:
@@ -1651,6 +2164,106 @@ def selftest(min_score):
           _raises_valueerror(lambda: parse_line_overrides("--nope", None, 5, False)))
     check("override parser: --only without a value raises",
           _raises_valueerror(lambda: parse_line_overrides("--only", None, 5, False)))
+
+    # chat: dispatcher, menu model and line editor (no terminal, no model call)
+    st = ChatState("synthetic-counsel")
+    check("chat: prompt shows the matter, then matter/scope",
+          st.prompt() == "synthetic-counsel > "
+          and chat_command(st, "/scope firm-bravo")[0] and st.prompt() == "synthetic-counsel/firm-bravo > ")
+    check("chat: /scope rejects an unknown folder and keeps the scope",
+          "unchanged" in chat_command(st, "/scope nope")[1] and st.scope == "firm-bravo")
+    check("chat: /scope alone clears to the whole matter",
+          chat_command(st, "/scope") == (True, "scope: whole matter (synthetic-counsel)") and st.scope is None)
+    check("chat: /only is an alias of /scope, trailing slash tolerated",
+          chat_command(st, "/only firm-echo/")[1].endswith("firm-echo") and st.scope == "firm-echo")
+    check("chat: /folders lists every firm folder with counts",
+          all(f in chat_command(st, "/folders")[1] for f in ("firm-alpha", "firm-echo", "4 indexed", "<- scope")))
+    check("chat: /matter switches, reloads, clears the scope",
+          chat_command(st, "/matter fixtures")[1].startswith("matter: fixtures")
+          and st.matter == "fixtures" and st.scope is None and any(f.endswith("por-revC.md") for f in st.files))
+    check("chat: /matter rejects an unknown matter and stays",
+          "no such matter" in chat_command(st, "/matter nope")[1] and st.matter == "fixtures")
+    check("chat: /matters marks the current one",
+          "fixtures  <- current" in chat_command(st, "/matters")[1])
+    check("chat: /set validates key and value",
+          chat_command(st, "/set top-k 8")[0] and st.top_k == 8
+          and "bad value" in chat_command(st, "/set top-k x")[1]
+          and "unknown key" in chat_command(st, "/set nope 1")[1]
+          and "usage" in chat_command(st, "/set top-k")[1])
+    check("chat: /diverse toggles and takes on/off",
+          chat_command(st, "/diverse")[1] == "diverse: on" and chat_command(st, "/diverse off")[1] == "diverse: off"
+          and "usage" in chat_command(st, "/diverse maybe")[1])
+    check("chat: unknown command is reported, /exit and /quit stop",
+          "unknown command '/nope'" in chat_command(st, "/nope")[1]
+          and chat_command(st, "/exit")[0] is False and chat_command(st, "/quit")[0] is False)
+    check("chat: /help lists every command in the table",
+          all(f"/{n}" in chat_help_text() for n, _, _, _ in CHAT_COMMANDS))
+    readme = open(os.path.join(BASE, "README.md"), encoding="utf-8").read()
+    check("chat: README documents every command in the table",
+          all(f"`/{n}" in readme for n, _, _, _ in CHAT_COMMANDS))
+    st = ChatState("synthetic-counsel")
+    check("menu: '/' lists every command, '/sc' narrows to /scope, a question shows none",
+          [r[0] for r in chat_menu("/", st)] == [f"/{n}" for n, _, _, _ in CHAT_COMMANDS]
+          and [r[0] for r in chat_menu("/sc", st)] == ["/scope"] and chat_menu("hello", st) == [])
+    check("menu: '/scope ' offers whole-matter first, then the folders",
+          [r[0] for r in chat_menu("/scope ", st)][:3] == ["/scope", "/scope firm-alpha", "/scope firm-bravo"])
+    check("menu: '/scope firm-e' filters to firm-echo, '/matter ' lists matters, '/set ' lists keys",
+          [r[0] for r in chat_menu("/scope firm-e", st)] == ["/scope firm-echo"]
+          and "/matter synthetic-counsel" in [r[0] for r in chat_menu("/matter ", st)]
+          and [r[1] for r in chat_menu("/set ", st)] == ["/set top-k ", "/set min-score ", "/set dense-min "])
+    check("menu: a fill that needs an argument ends with a space, one that runs does not",
+          dict((r[0], r[1]) for r in chat_menu("/", st))["/scope"] == "/scope "
+          and dict((r[0], r[1]) for r in chat_menu("/", st))["/show"] == "/show")
+
+    def drive(keys, history=None, width=80):
+        out = []
+        ed = LineEditor(lambda b: chat_menu(b, st), history=history, keys=keys,
+                        out=out.append, width=lambda: width)
+        return ed.read("m > "), "".join(out), ed
+    check("editor: plain typing returns the line", drive(list("hello") + ["enter"])[0] == "hello")
+    check("editor: tab fills /scope, down picks the first folder, enter runs it",
+          drive(["/", "s", "c", "tab", "down", "enter"])[0] == "/scope firm-alpha")
+    check("editor: enter on a command that needs an argument opens the argument menu, esc + enter submits as typed",
+          drive(["/", "down", "down", "enter", "esc", "enter"])[0] == "/matter ")
+    check("editor: enter on an exact command submits it as typed (/scope alone clears)",
+          drive(list("/scope") + ["enter"])[0] == "/scope")
+    check("editor: up wraps the highlight to the last command",
+          drive(["/", "up", "enter"])[0] == "/exit")
+    check("editor: up recalls history when no menu is open, twice goes further back",
+          drive(["up", "enter"], history=["first", "second"])[0] == "second"
+          and drive(["up", "up", "enter"], history=["first", "second"])[0] == "first"
+          and drive(["up", "up", "down", "enter"], history=["first", "second"])[0] == "second")
+    check("editor: esc closes the menu so up is history again",
+          drive(["/", "esc", "up", "enter"], history=["old q"])[0] == "old q")
+    check("editor: left/right, home/end, backspace, delete edit in place",
+          drive(list("abc") + ["left", "left", "X", "enter"])[0] == "aXbc"
+          and drive(list("abc") + ["home", "del", "end", "bs", "enter"])[0] == "b")
+    check("editor: ctrl-u/ctrl-k/ctrl-w kill line, to end, and the previous word",
+          drive(list("abc") + ["kill-line", "z", "enter"])[0] == "z"
+          and drive(list("ab cd") + ["left", "kill-end", "enter"])[0] == "ab c"
+          and drive(list("one two") + ["kill-word", "enter"])[0] == "one ")
+    check("editor: a multi-line paste folds into one line",
+          drive(["paste:line one\r\nline two\n", "enter"])[0] == "line one line two")
+    check("editor: ctrl-d on an empty line is EOF, on text it is ignored",
+          drive(["eof"])[0] is None and drive(["a", "eof", "enter"])[0] == "a")
+    check("editor: ctrl-c drops the line and starts over",
+          drive(["a", "intr", "b", "enter"])[0] == "b")
+    check("editor: wide characters keep their width",
+          drive(["한", "글", "enter"])[0] == "한글" and _width("한글 q") == 6)
+    check("editor: the menu draws in reverse video and is gone from the final line",
+          MENU_HL in drive(["/", "enter", "esc", "enter"])[1]
+          and drive(["/", "s", "h", "o", "w", "enter"])[1].endswith("m > /show\n"))
+    _, _, ed = drive(list("x" * 25) + ["enter"], width=10)
+    check("editor: a wrapped line is tracked over several rows", ed.cursor_row == 0)
+    big = [(f"/m{i:02d}", f"/m{i:02d}", f"row {i}") for i in range(15)]
+    out = []
+    ed = LineEditor(lambda b: big if b.startswith("/") else [], keys=["/"] + ["down"] * 12 + ["enter"],
+                    out=out.append, width=lambda: 80)
+    check("editor: a long menu scrolls to keep the highlight visible and says how many more",
+          ed.read("m > ") == "/m12" and "(5 more)" in "".join(out) and MENU_HL + " /m12" in "".join(out))
+    check("editor: submitted lines join the in-memory history without duplicates",
+          drive(["a", "enter"], history=["a"])[2].history == ["a"]
+          and drive(["b", "enter"], history=["a"])[2].history == ["a", "b"])
 
     # batch scorer: refusal detected whether the phrase leads or trails
     check("scorer: refusal at the end of a reasoned answer",
