@@ -10,19 +10,44 @@ Usage:
   python3 ask.py --matter patent-slw "What fee did the firm quote?"
   python3 ask.py --matter synthetic-counsel batch test-questions.txt
   python3 ask.py --matter synthetic-counsel chat
+
+Documents: .md .txt .pptx .docx .eml are read natively. .pdf .doc .rtf .html
+.ppt are converted at ingest by local tools (pdftotext, textutil, soffice) into
+a same-stem sidecar; coverage names any file that is still not indexed.
 """
 import argparse, hashlib, json, math, os, re, sys, time, urllib.request, urllib.error
 import zipfile, tempfile, xml.etree.ElementTree as ET
+import shutil, subprocess, html, email, email.policy, email.utils, email.header
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 SERVER = "http://127.0.0.1:1234/v1"
-DOC_EXTS = (".md", ".markdown", ".txt")
-PPTX_EXTS = (".pptx",)
-INGEST_EXTS = DOC_EXTS + PPTX_EXTS
-# Formats we deliberately do NOT parse. A file with one of these extensions is
-# "covered" only when a same-stem .txt sits beside it (the pdftotext workflow).
-CONVERTIBLE_EXTS = (".pdf", ".doc", ".docx", ".ppt", ".eml", ".msg", ".rtf",
-                    ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".heic")
+# Read natively, stdlib only:
+DOC_EXTS = (".md", ".markdown", ".txt")   # text; pdftotext form feeds -> 'page N'
+PPTX_EXTS = (".pptx",)                    # one section per slide, 'slide N'
+DOCX_EXTS = (".docx",)                    # Word: heading styles -> headings, tables whole
+EML_EXTS = (".eml",)                      # email: 'date From -> To' heading
+INGEST_EXTS = DOC_EXTS + PPTX_EXTS + DOCX_EXTS + EML_EXTS
+# Converted AT INGEST into a same-stem sidecar by a LOCAL command-line tool, so
+# nothing leaves the machine. ext -> (tool, sidecar ext, argv builder). When the
+# tool is missing the file stays SKIPPED and coverage names the tool. A sidecar
+# made by hand (not recorded in the manifest) is never overwritten.
+CONVERTERS = {
+    ".pdf":  ("pdftotext", ".txt",  lambda s, d: ["pdftotext", "-layout", s, d]),
+    ".doc":  ("textutil",  ".docx", lambda s, d: ["textutil", "-convert", "docx", "-output", d, s]),
+    ".rtf":  ("textutil",  ".docx", lambda s, d: ["textutil", "-convert", "docx", "-output", d, s]),
+    ".html": ("textutil",  ".docx", lambda s, d: ["textutil", "-convert", "docx", "-output", d, s]),
+    ".htm":  ("textutil",  ".docx", lambda s, d: ["textutil", "-convert", "docx", "-output", d, s]),
+    ".ppt":  ("soffice",   ".pptx", lambda s, d: ["soffice", "--headless", "--convert-to", "pptx",
+                                                  "--outdir", os.path.dirname(d), s]),
+}
+OCR_EXTS = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".heic")   # no local OCR/vision pass yet
+BY_HAND = {".msg": "export it from Outlook as .eml", ".pages": "export it from Pages as .docx",
+           ".key": "export it from Keynote as .pptx", ".numbers": "export the sheet as .txt",
+           ".xlsx": "export the sheet as .txt", ".csv": "save it as .txt"}
+_which = shutil.which             # tool lookup; selftest swaps it to simulate a missing tool
+DERIVED_MANIFEST = ".derived.json"   # in docs/: sidecar -> {source, hash[, empty]}
+MIN_TEXT_CHARS = 20                  # a converted file with less text is a scan, not text
+CONVERT_TIMEOUT = 180                # seconds; soffice can take a while to start
 
 # ---------------- tokenize ----------------
 
@@ -47,7 +72,7 @@ def tokenize(text):
 
 # ---------------- chunking ----------------
 
-CHUNK_VERSION = 4  # bump when chunking/embedding logic changes, forces re-index
+CHUNK_VERSION = 5  # bump when chunking/embedding logic changes, forces re-index
 
 # ---------------- pptx ----------------
 
@@ -198,13 +223,150 @@ def chunk_pptx(path, rel):
         chunks.extend(_chunk_lines(lines, rel, f"slide {no}"))
     return _merge_and_id(chunks, rel)
 
+# ---------------- docx (stdlib zipfile + ElementTree) ----------------
+
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+def _w_text(p):
+    """Visible text of a w:p (runs, tabs, soft breaks). Deleted-change text
+    (w:del) is skipped; inserted text reads as normal runs."""
+    out = []
+    for el in p.iter():
+        if el.tag == _W + "t":
+            out.append(el.text or "")
+        elif el.tag == _W + "tab":
+            out.append(" ")
+        elif el.tag == _W + "br" and el.get(_W + "type") != "page":
+            out.append("\n")
+        elif el.tag == _W + "delText":
+            pass
+    return "".join(out)
+
+def _docx_par_lines(p):
+    """One Word paragraph -> markdown-ish lines the chunker understands.
+    Heading N / Title styles become '#' headings (chunk boundaries + labels),
+    list paragraphs become '- ' items, plain paragraphs end with a blank line
+    so they chunk like markdown paragraphs."""
+    text = _w_text(p).strip()
+    ppr = p.find(_W + "pPr")
+    style, numbered = "", False
+    if ppr is not None:
+        ps = ppr.find(_W + "pStyle")
+        style = ((ps.get(_W + "val") if ps is not None else "") or "").lower().replace(" ", "")
+        numbered = ppr.find(_W + "numPr") is not None
+    if not text:
+        return [""]
+    m = re.match(r"(?:heading|berschrift|titre|encabezado)(\d)", style)   # Word localizes style ids
+    if m:
+        return ["", "#" * min(int(m.group(1)), 6) + " " + text, ""]
+    if style == "title":
+        return ["", "# " + text, ""]
+    if numbered or style.startswith("list"):
+        return ["- " + text]
+    return [text, ""]
+
+def docx_lines(path):
+    """Lines of a .docx in document order. Tables become markdown rows so a
+    table stays one chunk, exactly as in the pptx and markdown paths."""
+    with zipfile.ZipFile(path) as z:
+        root = ET.fromstring(z.read("word/document.xml"))
+    body = root.find(_W + "body")
+    lines = []
+    if body is None:
+        return lines
+    def walk(node):
+        for el in node:
+            if el.tag == _W + "p":
+                lines.extend(_docx_par_lines(el))
+            elif el.tag == _W + "tbl":
+                if lines and lines[-1] != "":
+                    lines.append("")
+                for tr in el.iter(_W + "tr"):
+                    cells = [" ".join(_w_text(p).strip() for p in tc.iter(_W + "p")).strip()
+                             for tc in tr.findall(_W + "tc")]
+                    lines.append("| " + " | ".join(cells) + " |")
+                lines.append("")
+            elif el.tag in (_W + "sdt", _W + "sdtContent"):   # content controls wrap real content
+                walk(el)
+    walk(body)
+    return lines
+
+# ---------------- eml (stdlib email) ----------------
+
+def _strip_html(s):
+    s = re.sub(r"(?is)<(script|style).*?</\1>", "", s)
+    s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</li>|</h\d>", "\n", s)
+    s = re.sub(r"<[^>]+>", "", s)
+    return html.unescape(s)
+
+def eml_lines(path):
+    """Lines of an .eml. The heading is 'YYYY-MM-DD From -> To', the same
+    shape the markdown threads use, so the attribution check can read the
+    speaker off the heading. Attachments are LISTED, not extracted: save them
+    beside the .eml so coverage sees them."""
+    with open(path, "rb") as f:
+        data = f.read()
+    msg = email.message_from_bytes(data, policy=email.policy.default)   # body walking
+    hdr = email.message_from_bytes(data)                                # raw headers
+    def header(h):
+        v = hdr.get(h, "") or ""
+        try:
+            return str(email.header.make_header(email.header.decode_header(v)))
+        except (UnicodeDecodeError, LookupError, ValueError):
+            return v
+    def who(h):
+        raw = header(h)
+        parts = []
+        for name, addr in email.utils.getaddresses([raw]):
+            # keep the display name as written: the RFC parser drops a
+            # parenthesised org like 'R. Chen (Firm Victor)' as a comment,
+            # and that org is what the attribution check matches on
+            m = re.search(r'"?([^,<"]*?)"?\s*<' + re.escape(addr) + r">", raw) if addr else None
+            if m and m.group(1).strip():
+                name = m.group(1).strip()
+            if name and addr:
+                parts.append(f"{name} <{addr}>")
+            elif name or addr:
+                parts.append(name or addr)
+        return ", ".join(parts)
+    sender, to = who("From"), who("To")
+    date = ""
+    try:
+        d = email.utils.parsedate_to_datetime(header("Date")) if header("Date") else None
+        if d:
+            date = d.strftime("%Y-%m-%d")
+    except (TypeError, ValueError):
+        pass
+    head = " ".join(x for x in (date, f"{sender} -> {to}" if (sender or to) else "") if x).strip()
+    lines = ["# " + (head or "email"), f"Subject: {header('Subject') or '(none)'}", ""]
+    body = msg.get_body(preferencelist=("plain", "html"))
+    text = ""
+    if body is not None:
+        try:
+            text = body.get_content()
+        except (LookupError, UnicodeDecodeError):
+            text = body.get_payload(decode=True).decode("utf-8", "replace")
+        if body.get_content_type() == "text/html":
+            text = _strip_html(text)
+    lines += [l.rstrip() for l in text.splitlines()]
+    atts = [p.get_filename() for p in msg.iter_attachments() if p.get_filename()]
+    if atts:
+        lines += ["", "Attachments (listed, not extracted): " + ", ".join(atts)]
+    return lines
+
 def chunk_file(path, rel):
     """Split a file into chunks at headings and blank lines.
     A markdown table stays one chunk. Never split inside a line.
     pdftotext output uses form feeds as page breaks: label chunks 'page N'.
-    .pptx is read natively: one section per slide, labelled 'slide N'."""
-    if path.lower().endswith(PPTX_EXTS):
+    .pptx is read natively: one section per slide, labelled 'slide N'.
+    .docx and .eml are read natively into the same line shape as markdown."""
+    low = path.lower()
+    if low.endswith(PPTX_EXTS):
         return chunk_pptx(path, rel)
+    if low.endswith(DOCX_EXTS):
+        return _merge_and_id(_chunk_lines(docx_lines(path), rel, ""), rel)
+    if low.endswith(EML_EXTS):
+        return _merge_and_id(_chunk_lines(eml_lines(path), rel, ""), rel)
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
     if "\f" in text:
@@ -274,37 +436,181 @@ def file_hash(path):
         h.update(f.read())
     return h.hexdigest()
 
+def _hidden(name):
+    """Dotfiles and Office lock files (~$foo.docx) are never documents."""
+    return name.startswith(".") or name.startswith("~$")
+
+def _manifest_path(docs):
+    return os.path.join(docs, DERIVED_MANIFEST)
+
+def load_manifest(docs):
+    p = _manifest_path(docs)
+    if os.path.exists(p):
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_manifest(docs, manifest):
+    p = _manifest_path(docs)
+    if manifest:
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=1, sort_keys=True)
+    elif os.path.exists(p):
+        os.remove(p)
+
+def skip_reason(ext, empty=False):
+    """Why a file is not indexed, and what to do. Names the missing tool."""
+    if ext in CONVERTERS:
+        tool, side, _ = CONVERTERS[ext]
+        if empty:
+            return "converted but no text found (scanned image? needs OCR); not indexed"
+        if _which(tool):
+            return f"auto-converts to {side} on ingest ({tool}); run ingest"
+        return f"convert by hand: {tool} is not installed (or save it as {side})"
+    if ext in OCR_EXTS:
+        return "image: no local OCR/vision pass yet; not indexed"
+    if ext in BY_HAND:
+        return "convert by hand: " + BY_HAND[ext]
+    return "unsupported file type"
+
 def scan_coverage(docs):
     """Classify every file under docs/. Returns (indexable, skipped).
 
-    A file is 'covered by companion' when a same-stem .txt sits beside it,
-    which is the pdftotext workflow. Anything else unreadable is SKIPPED, and
-    a skipped file is invisible at query time unless we say so out loud.
+    A file is 'covered by companion' when a same-stem file in an ingestable
+    format sits beside it (foo.pdf next to foo.txt, foo.doc next to foo.docx),
+    whether ingest made that companion or a person did. Anything else
+    unreadable is SKIPPED, and a skipped file is invisible at query time
+    unless we say so out loud.
     """
     indexable, skipped = {}, []
+    empty = {r["source"] for r in load_manifest(docs).values() if r.get("empty")}
     by_stem = {}
     for root, _, names in os.walk(docs):
         for name in names:
-            stem = os.path.splitext(name)[0].lower()
-            by_stem.setdefault((root, stem), set()).add(os.path.splitext(name)[1].lower())
+            if _hidden(name):
+                continue
+            stem, ext = os.path.splitext(name)
+            by_stem.setdefault((root, stem.lower()), set()).add(ext.lower())
     for root, _, names in os.walk(docs):
         for name in sorted(names):
-            if name.startswith("."):
+            if _hidden(name):
                 continue
             p_ = os.path.join(root, name)
             rel = os.path.relpath(p_, docs)
-            ext = os.path.splitext(name)[1].lower()
+            stem, ext = os.path.splitext(name)
+            ext = ext.lower()
             if ext in INGEST_EXTS:
                 indexable[rel] = file_hash(p_)
                 continue
-            stem = os.path.splitext(name)[0].lower()
-            companions = by_stem.get((root, stem), set())
-            if any(c in DOC_EXTS for c in companions):
+            companions = by_stem.get((root, stem.lower()), set())
+            if any(c in INGEST_EXTS for c in companions):
                 continue  # e.g. foo.pdf next to foo.txt
-            why = ("convert it first (pdftotext -layout / export to .txt)"
-                   if ext in CONVERTIBLE_EXTS else "unsupported file type")
-            skipped.append({"file": rel, "ext": ext, "why": why})
+            skipped.append({"file": rel, "ext": ext, "why": skip_reason(ext, rel in empty)})
     return indexable, skipped
+
+def _run_tool(argv, dst):
+    """Run a local converter. Returns (ok, error text). No network, no shell."""
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=CONVERT_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, str(e)
+    if r.returncode != 0:
+        tail = (r.stderr or r.stdout or "").strip().splitlines()
+        return False, tail[-1] if tail else f"exit {r.returncode}"
+    return True, ""
+
+def _has_text(path):
+    try:
+        return sum(len(c["text"].strip()) for c in chunk_file(path, "x")) >= MIN_TEXT_CHARS
+    except (OSError, zipfile.BadZipFile, ET.ParseError, KeyError):
+        return False
+
+def convert_pending(docs, run=None, dry_run=False):
+    """Make a sidecar for every convertible file that has no ingestable
+    same-stem companion, using local tools only. Returns a list of events
+    (file, status, detail) with status in: converted | pending (dry run) |
+    failed | empty | stale.
+
+    Rules, in order:
+    - a sidecar recorded in the manifest is re-made when its source hash changed;
+    - a companion NOT in the manifest was made by a person: never overwritten,
+      only flagged 'stale' when the source is newer than it;
+    - a conversion that yields no text is a scan: the sidecar is removed and the
+      empty result is remembered per source hash so ingest does not loop on it;
+    - a missing tool is left to coverage to report.
+    """
+    run = run or _run_tool
+    manifest = load_manifest(docs)
+    before = json.dumps(manifest, sort_keys=True)
+    events = []
+    for root, _, names in os.walk(docs):
+        present = set(names)
+        for name in sorted(names):
+            if _hidden(name):
+                continue
+            stem, ext = os.path.splitext(name)
+            ext = ext.lower()
+            if ext not in CONVERTERS:
+                continue
+            tool, side_ext, argv = CONVERTERS[ext]
+            src = os.path.join(root, name)
+            rel = os.path.relpath(src, docs)
+            dst = os.path.join(root, stem + side_ext)
+            drel = os.path.relpath(dst, docs)
+            h = file_hash(src)
+            rec = manifest.get(drel)
+            ours = bool(rec) and rec.get("source") == rel
+            if os.path.exists(dst):
+                if ours and rec.get("hash") == h:
+                    continue                                   # up to date
+                if not ours:
+                    if os.path.getmtime(src) > os.path.getmtime(dst) + 1:
+                        events.append((rel, "stale", f"{drel} is older than its source and was "
+                                       "made by hand; delete it to re-convert"))
+                    continue                                   # a person's file: keep it
+            else:
+                others = [e for e in INGEST_EXTS if e != side_ext and
+                          any(n.lower() == (stem + e).lower() for n in present)]
+                if others:
+                    continue                                   # covered by another companion
+                if ours and rec.get("empty") and rec.get("hash") == h:
+                    continue                                   # known scan, unchanged
+            if not _which(tool):
+                continue                                       # coverage reports it
+            if dry_run:
+                events.append((rel, "pending", f"{drel} ({tool})"))
+                continue
+            ok, err = run(argv(src, dst), dst)
+            if not ok or not os.path.exists(dst):
+                events.append((rel, "failed", err or f"{tool} wrote no {side_ext}"))
+                continue
+            if not _has_text(dst):
+                os.remove(dst)
+                manifest[drel] = {"source": rel, "hash": h, "empty": True}
+                events.append((rel, "empty", skip_reason(ext, empty=True)))
+                continue
+            manifest[drel] = {"source": rel, "hash": h}
+            events.append((rel, "converted", f"{drel} ({tool})"))
+    # drop manifest rows whose source is gone
+    for drel in list(manifest):
+        if not os.path.exists(os.path.join(docs, manifest[drel].get("source", ""))):
+            del manifest[drel]
+    if not dry_run and json.dumps(manifest, sort_keys=True) != before:
+        save_manifest(docs, manifest)
+    return events
+
+def _report_conversions(events):
+    for rel, status, detail in events:
+        if status == "converted":
+            print(f"[convert] {rel} -> {detail}")
+        elif status == "pending":
+            print(f"[convert] {rel} will convert on ingest -> {detail}")
+        elif status == "failed":
+            print(f"[convert] FAILED {rel}: {detail}", file=sys.stderr)
+        elif status == "empty":
+            print(f"[convert] {rel}: {detail}", file=sys.stderr)
+        elif status == "stale":
+            print(f"[stale]   {rel}: {detail}", file=sys.stderr)
 
 def _warn_skipped(skipped, docs):
     if not skipped:
@@ -330,6 +636,7 @@ def coverage(matter):
         with open(idx_path, encoding="utf-8") as f:
             indexed = set(json.load(f).get("files", {}))
     print(f"matter: {matter}")
+    _report_conversions(convert_pending(docs, dry_run=True))
     print(f"  indexable files : {len(indexable)}")
     print(f"  in current index: {len(indexed)}")
     stale = sorted(set(indexable) - indexed)
@@ -355,11 +662,14 @@ def ingest(matter, quiet=False):
     if os.path.exists(index_path):
         with open(index_path, encoding="utf-8") as f:
             old = json.load(f)
+    events = convert_pending(docs)
+    if not quiet:
+        _report_conversions(events)
     files, skipped = scan_coverage(docs)
     if not quiet:
         _warn_skipped(skipped, docs)
     if not files:
-        sys.exit(f"No .md/.txt/.pptx files in {docs}")
+        sys.exit(f"No readable documents ({', '.join(INGEST_EXTS)}) in {docs}")
     _, emb = server_models()
     if files == old.get("files") and old.get("chunk_version") == CHUNK_VERSION \
             and (old.get("embed_model") or not emb):
@@ -1192,6 +1502,138 @@ def selftest(min_score):
               [x["file"] for x in skipped] == ["unread.pdf"])
         check("coverage treats a .pdf with a .txt companion as covered",
               "paired.txt" in idxable and "paired.pdf" not in idxable)
+
+    # native .docx: heading styles -> chunk headings, list items, table whole
+    dx = [c for c in index["chunks"] if c["file"] == "styles.docx"]
+    check("docx: Heading styles become chunk headings",
+          any(c["heading"] == "Fees" and "3,150" in c["text"] for c in dx)
+          and any(c["heading"] == "Conditions" for c in dx))
+    check("docx: list paragraphs become '- ' items",
+          any("- Fixed fee covers one round" in c["text"] for c in dx))
+    check("docx: table kept whole (Design patent + Trademark search in one chunk)",
+          any(c["text"].lstrip().startswith("|") and "Design patent" in c["text"]
+              and "Trademark search" in c["text"] for c in dx))
+
+    # native .eml: 'date From -> To' heading, subject + body, attachments listed
+    em = [c for c in index["chunks"] if c["file"] == "thread.eml"]
+    check("eml: heading is 'date From -> To' with the org kept",
+          bool(em) and em[0]["heading"].startswith("2026-08-18 ")
+          and "(Firm Lima)" in em[0]["heading"].split("->")[0]
+          and "TestCo" in em[0]["heading"].split("->")[1])
+    check("eml: subject and body captured",
+          any("Subject: Re: engagement terms" in c["text"] for c in em)
+          and any("2,400" in c["text"] for c in em))
+    check("eml: attachments are listed, not extracted",
+          any("lima-proposal.pdf" in c["text"] for c in em))
+    check("attribution: an .eml sender passes the speaker check",
+          bool(em) and verify_attribution("Firm Lima stated a retainer is required.",
+                                          [("thread.eml", em[0]["heading"])]) == [])
+
+    # coverage classification of the formats we do not read natively
+    with tempfile.TemporaryDirectory() as td:
+        for n in ("legacy.msg", "photo.png", "odd.xyz", "old.doc", "~$lock.docx", ".hidden.md"):
+            open(os.path.join(td, n), "wb").write(b"stub")
+        open(os.path.join(td, "old.docx"), "wb").write(b"stub")
+        idxable, skipped = scan_coverage(td)
+        by = {s["file"]: s["why"] for s in skipped}
+        check("coverage: .doc next to .docx is covered by the companion",
+              "old.doc" not in by and "old.docx" in idxable)
+        check("coverage: Office lock files and dotfiles are ignored",
+              not any(f.startswith(("~$", ".")) for f in list(idxable) + list(by)))
+        check("coverage: .msg says convert by hand", by.get("legacy.msg", "").startswith("convert by hand"))
+        check("coverage: an image says no OCR", "OCR" in by.get("photo.png", ""))
+        check("coverage: unknown extension is unsupported", by.get("odd.xyz") == "unsupported file type")
+        global _which
+        real_which = _which
+        _which = lambda t: "/fake/" + t
+        check("coverage: a convertible file names its tool",
+              "pdftotext" in skip_reason(".pdf") and "soffice" in skip_reason(".ppt"))
+        _which = lambda t: None
+        check("coverage: a missing tool says so", "not installed" in skip_reason(".pdf"))
+        _which = real_which
+
+    # convert_pending with a fake tool runner: the rules, not the tools
+    with tempfile.TemporaryDirectory() as td:
+        calls, fake_out = [], ["Converted text long enough to count as real content."]
+        def fake(argv, dst):
+            calls.append(argv[0])
+            with open(dst, "w") as f:
+                f.write(fake_out[0])
+            return True, ""
+        def w(name, data):
+            with open(os.path.join(td, name), "wb" if isinstance(data, bytes) else "w") as f:
+                f.write(data)
+        def ex(name):
+            return os.path.exists(os.path.join(td, name))
+        real_which = _which
+        _which = lambda t: "/fake/" + t
+        w("a.pdf", b"%PDF-1.4 one")
+        ev = convert_pending(td, run=fake)
+        check("convert: makes a sidecar and records it in the manifest",
+              [e[1] for e in ev] == ["converted"] and ex("a.txt")
+              and load_manifest(td).get("a.txt", {}).get("source") == "a.pdf")
+        ev = convert_pending(td, run=fake)
+        check("convert: an unchanged source is not converted again", ev == [] and len(calls) == 1)
+        w("a.pdf", b"%PDF-1.4 two")
+        ev = convert_pending(td, run=fake)
+        check("convert: a changed source is re-converted",
+              [e[1] for e in ev] == ["converted"] and len(calls) == 2)
+        w("h.pdf", b"%PDF-1.4 h"); w("h.txt", "hand made")
+        now = time.time()
+        os.utime(os.path.join(td, "h.txt"), (now - 100, now - 100))
+        os.utime(os.path.join(td, "h.pdf"), (now, now))
+        ev = convert_pending(td, run=fake)
+        check("convert: a hand-made companion is kept and flagged stale",
+              open(os.path.join(td, "h.txt")).read() == "hand made" and len(calls) == 2
+              and [e for e in ev if e[0] == "h.pdf" and e[1] == "stale"])
+        fake_out[0] = " \n"
+        w("scan.pdf", b"%PDF-1.4 scan")
+        ev = convert_pending(td, run=fake)
+        check("convert: empty text removes the sidecar and reports a scan",
+              not ex("scan.txt") and [e for e in ev if e[0] == "scan.pdf" and e[1] == "empty"])
+        n = len(calls)
+        convert_pending(td, run=fake)
+        check("convert: a known scan is not retried while unchanged", len(calls) == n)
+        _, sk = scan_coverage(td)
+        check("coverage: a scan is reported as needing OCR",
+              any(s["file"] == "scan.pdf" and "OCR" in s["why"] for s in sk))
+        fake_out[0] = "Converted text long enough to count as real content."
+        w("b.pdf", b"%PDF-1.4 b")
+        ev = convert_pending(td, run=fake, dry_run=True)
+        check("convert: a dry run reports pending and writes nothing",
+              [e[1] for e in ev if e[0] == "b.pdf"] == ["pending"] and not ex("b.txt"))
+        w("c.doc", b"doc"); w("c.txt", "hand")
+        ev = convert_pending(td, run=fake)
+        check("convert: any ingestable same-stem companion blocks conversion",
+              not ex("c.docx") and not any(e[0] == "c.doc" for e in ev))
+        _which = lambda t: None
+        w("d.pdf", b"%PDF-1.4 d")
+        convert_pending(td, run=fake)
+        check("convert: a missing tool leaves the file to coverage", not ex("d.txt"))
+        _which = real_which
+
+    # format-probe: one synthetic file per format, converted by the REAL local tools
+    probe = os.path.join(BASE, "matters", "format-probe", "docs")
+    if os.path.isdir(probe) and shutil.which("textutil") and shutil.which("pdftotext"):
+        pidx = ingest("format-probe", quiet=True)
+        pf = set(pidx["files"])
+        want = {"firm-zulu/fee-letter.txt", "firm-yankee/engagement.docx", "firm-xray/terms.docx",
+                "firm-uniform/notes.docx", "firm-whiskey/proposal.docx", "firm-victor/reply.eml"}
+        check("format-probe: pdf/doc/rtf/html/docx/eml all became readable files", want <= pf)
+        check("format-probe: the .msg stub is the only skipped file",
+              [s["file"] for s in pidx["skipped"]] == ["firm-tango/legacy.msg"])
+        def top(q):
+            h = bm25(pidx["chunks"], q, 1)
+            return h[0][1]["file"] if h else ""
+        for q, f in (("Firm Zulu provisional application quote", "firm-zulu/fee-letter.txt"),
+                     ("Firm Yankee retainer before work begins", "firm-yankee/engagement.docx"),
+                     ("Firm Xray hourly rate office action", "firm-xray/terms.docx"),
+                     ("Firm Uniform volume discount ten filings", "firm-uniform/notes.docx"),
+                     ("Firm Whiskey design patent fee", "firm-whiskey/proposal.docx"),
+                     ("Firm Victor decline conflict of interest", "firm-victor/reply.eml")):
+            check(f"format-probe: retrieval reaches {f.split('/')[1]}", top(q) == f)
+    else:
+        print("format-probe live conversion skipped (matter absent or textutil/pdftotext missing)")
 
     # chat/batch shared override parser (pure, no model call)
     check("override parser: full flags parse",

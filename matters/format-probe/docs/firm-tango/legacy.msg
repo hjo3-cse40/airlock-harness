@@ -1,0 +1,1 @@
+поЮ stub Outlook message, not readable by design

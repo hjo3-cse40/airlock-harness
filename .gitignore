@@ -4,3 +4,11 @@ __pycache__/
 matters/patent-counsel/
 matters/haystack-*/
 run-config.json
+# ingest-made sidecars + manifest of the format probe: a fresh clone must re-convert
+matters/*/docs/**/.derived.json
+matters/format-probe/index.json
+matters/format-probe/audit/
+matters/format-probe/docs/firm-zulu/fee-letter.txt
+matters/format-probe/docs/firm-yankee/engagement.docx
+matters/format-probe/docs/firm-xray/terms.docx
+matters/format-probe/docs/firm-uniform/notes.docx

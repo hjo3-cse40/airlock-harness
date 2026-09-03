@@ -1,0 +1,24 @@
+From: P. Okafor (Firm Lima) <p.okafor@firm-lima.example>
+To: TestCo <patents@testco.example>
+Date: Tue, 18 Aug 2026 09:15:00 -0700
+Subject: Re: engagement terms
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============8126092502147492844=="
+
+--===============8126092502147492844==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Firm Lima can start after a retainer of 2,400 dollars is received.
+
+Our fee proposal is attached.
+
+--===============8126092502147492844==
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="lima-proposal.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjQgc3R1Yg==
+
+--===============8126092502147492844==--
