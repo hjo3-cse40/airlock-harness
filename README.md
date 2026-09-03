@@ -72,6 +72,7 @@ Commands:
 | `/matter <name>` | switch to another matter, reload its index, clear the scope |
 | `/matters` | list the matters |
 | `/reingest` | convert new files, rebuild the index, show coverage |
+| `/reason <question>` | think first, then compute and compare over the sources; conclusions are labeled `[INFERENCE]` (slower, lower trust) |
 | `/set <key> <value>` | `top-k`, `min-score` (BM25 gate), `dense-min` (cosine gate) |
 | `/diverse [on\|off]` | best chunk per source first; no value toggles |
 | `/show` | print the current settings |
@@ -86,10 +87,27 @@ History persists per matter in `matters/<name>/audit/chat-history.txt`,
 beside the audit log and inside the same privacy boundary. When the input is
 not a terminal (a pipe, a test), the chat falls back to a plain prompt.
 
-## Two modes
+## Three modes
 
 - **Ask (extract).** One question, one retrieval, one grounded answer, or a
-  refusal. This is the validated core.
+  refusal. This is the validated core. The model does not think first: every
+  extraction call sends `reasoning_effort: "none"`, so a thinking toggle left
+  on in the LM Studio UI cannot change a grounded run.
+- **Reason (think, compute, compare).** The same retrieval and gate, a
+  different contract with the model (`reason-prompt.txt`): it may add, compare
+  and conclude over the cited facts, it must show the arithmetic, and every
+  conclusion that is not written in a source carries an `[INFERENCE]` label.
+  The model thinks before it answers; the thinking trace and the token count
+  go into the audit line, and a live counter shows progress. It retrieves at
+  least 8 chunks, best chunk per source first. Expect one to three minutes per
+  question on a 9B model, against a few seconds for ask. Lower trust than ask:
+  a computed number is a new number, so the number check reports it and the
+  reader checks the arithmetic. Reason answers are sampled (temperature 0.6,
+  the setting Qwen recommends for thinking) because greedy decoding can lock
+  the trace into a verbatim cycle, so they are not byte-reproducible; the
+  audit line keeps the trace. If the trace does start repeating itself the
+  run is stopped and says `LOOP`; if the thinking eats the whole budget the
+  run says `TRUNCATED` instead of pretending.
 - **Summarize (compose).** A two-stage summary: first gather the matter's own
   chunks as numbered, cited sources, then compose bullets from only those. Every
   bullet carries a citation, and the same deterministic checks run over the
@@ -147,6 +165,7 @@ python3 ask.py --matter <name> ingest
 python3 ask.py --matter <name> coverage
 python3 ask.py --matter <name> chat
 python3 ask.py --matter <name> "your question"
+python3 ask.py --matter <name> reason "a question that needs arithmetic or comparison"
 python3 ask.py --matter <name> batch questions.txt
 python3 ask.py --matter <name> summarize [--only <folder>] [--out file.md]
 ```
@@ -181,7 +200,8 @@ boundary: not retrieval, not the index, not the audit log, not the history.
 
     airlock/
     ├── ask.py                 # the entire harness
-    ├── prompt.txt             # grounding rules for the model
+    ├── prompt.txt             # grounding rules for the model (ask, extraction)
+    ├── reason-prompt.txt      # rules for reason mode (compute, label inferences)
     ├── eval_summary.py        # faithfulness eval for the summarize mode
     ├── make_haystack.py       # generate a needle-in-a-haystack test corpus
     ├── make_fixture_docs.py   # build the .docx/.eml fixtures and the format probe
@@ -205,8 +225,8 @@ boundary: not retrieval, not the index, not the audit log, not the history.
 
 - `python3 ask.py selftest` runs the deterministic checks: chunking, retrieval,
   the refusal gate, the number and attribution checks, the document parsers,
-  coverage and conversion rules, the chat dispatcher, the menu, and the line
-  editor driven by injected keys. No terminal or model is needed; when a server
+  coverage and conversion rules, the chat dispatcher, the menu, the line
+  editor driven by injected keys, and the reason-mode request shape. No terminal or model is needed; when a server
   is up, one live question runs at the end.
 - `matters/synthetic-counsel/test-questions.txt` is a 40-question benchmark
   with `ANSWER-KEY.md`. Run it with `batch` and score by hand against the key.
