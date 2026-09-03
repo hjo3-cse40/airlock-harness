@@ -77,7 +77,8 @@ Commands:
 | `/matters` | list the matters |
 | `/reingest` | convert new files, rebuild the index, show coverage |
 | `/reason <question>` | think first, then compute and compare over the sources; conclusions are labeled `[INFERENCE]` (slower, lower trust) |
-| `/think [on\|off]` | show the `/reason` thinking trace in gray as it streams; no value toggles (default off, a counter shows instead) |
+| `/think [on\|off]` | show the `/reason` thinking trace in gray as it streams; no value toggles (default on; off shows a counter instead) |
+| `/clear` | forget the previous turn, so the next `/reason` starts fresh |
 | `/set <key> <value>` | `top-k`, `min-score` (BM25 gate), `dense-min` (cosine gate), `think-budget` (reason-mode `max_tokens`, default 8000) |
 | `/diverse [on\|off]` | best chunk per source first; no value toggles |
 | `/show` | print the current settings |
@@ -110,8 +111,14 @@ not a terminal (a pipe, a test), the chat falls back to a plain prompt.
   and conclude over the cited facts, it must show the arithmetic, and every
   conclusion that is not written in a source carries an `[INFERENCE]` label.
   The model thinks before it answers; the thinking trace and the token count
-  go into the audit line, and a live counter shows progress (`/think on` or
-  `--show-thinking` streams the trace itself in gray instead). It retrieves at
+  go into the audit line, and the trace streams in gray as it is written
+  (`/think off` shows a counter instead). In chat, `/reason` also sees the
+  previous turn (your last question and its answer, one turn only, capped at
+  about 1,500 tokens) so a follow-up like "and Bravo?" works. The previous
+  turn is marked as context, not a source: the model must not cite it, and
+  retrieval runs fresh on the new question plus the previous one. Plain
+  questions never see a previous turn. `/clear` forgets it; `/show` says
+  what is remembered. It retrieves at
   least 8 chunks, best chunk per source first. Expect one to three minutes per
   question on a 9B model, against a few seconds for ask. Lower trust than ask:
   a computed number is a new number, so the number check reports it and the
