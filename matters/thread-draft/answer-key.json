@@ -1,0 +1,1332 @@
+{
+ "questions": [
+  {
+   "n": 1,
+   "category": "date_who",
+   "text": "what day did he reply to the proposal?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 7",
+     "7 May",
+     "2026-05-07",
+     "05-07"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Daniel replied on Thursday, May 7, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 2,
+   "category": "date_who",
+   "text": "who replied to Maya's proposal, and when?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Daniel"
+   ],
+   "any": [
+    [
+     "May 7",
+     "7 May",
+     "2026-05-07",
+     "05-07"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Daniel Okonkwo, the Executive Director, replied on May 7, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 3,
+   "category": "date_who",
+   "text": "when was the proposal sent?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 4",
+     "4 May",
+     "2026-05-04",
+     "05-04"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Maya sent the proposal on Monday, May 4, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 4,
+   "category": "date_who",
+   "text": "when did Maya send her follow-up questions?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 8",
+     "8 May",
+     "2026-05-08",
+     "05-08"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Maya's follow-up with three questions was sent on Friday, May 8, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 5,
+   "category": "date_who",
+   "text": "when was the last message in the thread, and who sent it?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Daniel"
+   ],
+   "any": [
+    [
+     "May 11",
+     "11 May",
+     "2026-05-11",
+     "05-11"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The last message is Daniel's quick answers on Monday, May 11, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 6,
+   "category": "summary",
+   "text": "summarize Daniel's reply",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Approves the expansion in principle with changes: cap lowered to $34,000; 24 plots and 14 cedar raised beds by the gate; compost max 35%; Hollis water line at $6,900 with a $1,600 deposit; small shed on skids yes, second shed no; greenhouse deferred until the permit; $475 city permit via Lena Whitfield; no paid crew leader; bakery pledge $3,200 plus 27% of June loaves; Oakdale program only with a signed principal's letter; three deadlines (May 15, 21, 29) and a meeting May 19 at 6:30 p.m.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F08",
+    "F09",
+    "F10",
+    "F12",
+    "F16",
+    "F17",
+    "F21",
+    "F23",
+    "F24",
+    "F33"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "shed"
+    ],
+    [
+     "24",
+     "14"
+    ],
+    [
+     "35%",
+     "compost"
+    ],
+    [
+     "Hollis",
+     "water line",
+     "$6,900",
+     "6,900"
+    ],
+    [
+     "permit",
+     "$475",
+     "Lena"
+    ],
+    [
+     "May 19",
+     "6:30",
+     "meeting"
+    ],
+    [
+     "Miller",
+     "Bakery",
+     "bakery",
+     "$3,200",
+     "27%"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 7,
+   "category": "summary",
+   "text": "what did he say in general about the plan?",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "He approves the expansion in principle but not as proposed: the cap drops to $34,000, the greenhouse waits for the permit, the second shed and the paid crew leader are rejected, the water line is the priority, the two-season rule applies to anything permanent, the bakery pledge sits outside the cap, the school program needs a signed letter, and he wants a revised budget, the Hollis contract, and the layout by May 15, 21, and 29.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F07",
+    "F16",
+    "F17",
+    "F23",
+    "F27",
+    "F28",
+    "F29",
+    "F30"
+   ],
+   "facts": [
+    [
+     "in principle"
+    ],
+    [
+     "two of the items",
+     "two items",
+     "no to two",
+     "second shed"
+    ],
+    [
+     "holding two",
+     "two decisions",
+     "holding"
+    ],
+    [
+     "revised plan",
+     "revised"
+    ],
+    [
+     "good work",
+     "we are doing this",
+     "doing this"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "pace and money",
+     "not about whether"
+    ]
+   ],
+   "min_facts": 4
+  },
+  {
+   "n": 8,
+   "category": "summary",
+   "text": "what are the main points of his May 7 email?",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Approval in principle with changes; cap $34,000; 24 plots and 14 raised beds; Hollis water line $6,900 with $1,600 deposit; shed yes, second shed no; greenhouse deferred; permit $475 through Lena Whitfield; no paid crew leader; bakery $3,200 and 27%; Oakdale needs a signed letter; deadlines May 15, 21, 29; meeting May 19 at 6:30 p.m.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F08",
+    "F09",
+    "F12",
+    "F16",
+    "F17",
+    "F21",
+    "F24",
+    "F27",
+    "F33"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "shed"
+    ],
+    [
+     "24",
+     "14"
+    ],
+    [
+     "Hollis",
+     "water line",
+     "$6,900",
+     "6,900"
+    ],
+    [
+     "permit",
+     "$475",
+     "Lena"
+    ],
+    [
+     "May 19",
+     "6:30",
+     "meeting"
+    ],
+    [
+     "Miller",
+     "Bakery",
+     "bakery",
+     "$3,200",
+     "27%"
+    ],
+    [
+     "Oakdale",
+     "school",
+     "signed letter"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 9,
+   "category": "summary",
+   "text": "give me an overview of where things stand after the whole thread",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Expansion approved in principle under a $34,000 cap; greenhouse deferred until the permit; Hollis water line approved with a $1,600 deposit paid from the expansion account; compost limit applies to in-ground plots only (raised beds may be half compost); shed moved to the east corner by the gate because the north line is in the setback; Oakdale start season still open until Daniel meets the principal; meeting May 19 at 6:30 p.m.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F17",
+    "F13",
+    "F21",
+    "F33",
+    "F35",
+    "F36",
+    "F37",
+    "F38"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "Hollis",
+     "water line",
+     "$6,900",
+     "6,900",
+     "$1,600",
+     "1,600"
+    ],
+    [
+     "permit",
+     "$475",
+     "Lena"
+    ],
+    [
+     "May 19",
+     "6:30",
+     "meeting"
+    ],
+    [
+     "expansion account"
+    ],
+    [
+     "east corner",
+     "setback",
+     "by the gate"
+    ],
+    [
+     "half compost",
+     "half",
+     "raised beds"
+    ],
+    [
+     "principal",
+     "Oakdale",
+     "school"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 10,
+   "category": "specific_fact",
+   "text": "what budget cap did he set?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$34,000"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Daniel lowered the cap to $34,000 (from Maya's proposed $41,250).",
+   "fact_ids": [
+    "F05",
+    "F02"
+   ]
+  },
+  {
+   "n": 11,
+   "category": "specific_fact",
+   "text": "what's the max compost share he'll allow in the fill mix?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "35%"
+   ],
+   "any": [],
+   "must_not": [
+    "27%"
+   ],
+   "cite": "thread.eml",
+   "expected": "No more than 35% compost; the rest is screened topsoil.",
+   "fact_ids": [
+    "F10"
+   ]
+  },
+  {
+   "n": 12,
+   "category": "specific_fact",
+   "text": "what percent of each garden loaf will Miller's Bakery give us?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "27%"
+   ],
+   "any": [],
+   "must_not": [
+    "35%"
+   ],
+   "cite": "thread.eml",
+   "expected": "27% of the price of every garden loaf sold in June.",
+   "fact_ids": [
+    "F25"
+   ]
+  },
+  {
+   "n": 13,
+   "category": "specific_fact",
+   "text": "how many in-ground plots did he approve?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "24"
+   ],
+   "any": [],
+   "must_not": [
+    "46"
+   ],
+   "cite": "thread.eml",
+   "expected": "24 in-ground plots.",
+   "fact_ids": [
+    "F08"
+   ]
+  },
+  {
+   "n": 14,
+   "category": "specific_fact",
+   "text": "how many raised beds did he approve, and where do they go?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "14"
+   ],
+   "any": [
+    [
+     "gate"
+    ]
+   ],
+   "must_not": [
+    "46"
+   ],
+   "cite": "thread.eml",
+   "expected": "14 cedar raised beds, placed nearest the gate.",
+   "fact_ids": [
+    "F09"
+   ]
+  },
+  {
+   "n": 15,
+   "category": "specific_fact",
+   "text": "how many active volunteers are on the spring roster?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "46"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "46 active volunteers.",
+   "fact_ids": [
+    "F22"
+   ]
+  },
+  {
+   "n": 16,
+   "category": "specific_fact",
+   "text": "when can Hollis do the trenching?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "June 16",
+    "July 10"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Hollis can trench from June 16 to July 10.",
+   "fact_ids": [
+    "F14"
+   ]
+  },
+  {
+   "n": 17,
+   "category": "specific_fact",
+   "text": "who's our contact at the city for the permit?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Lena Whitfield"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Lena Whitfield, the permits clerk at the city building office.",
+   "fact_ids": [
+    "F20"
+   ]
+  },
+  {
+   "n": 18,
+   "category": "specific_fact",
+   "text": "how much is the city permit fee?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$475"
+   ],
+   "any": [],
+   "must_not": [
+    "$34,000",
+    "$41,250",
+    "$1,600",
+    "$1,380",
+    "$2,850",
+    "$3,200"
+   ],
+   "cite": "thread.eml",
+   "expected": "$475, paid to the city when the full application is filed, and not refunded if the permit is denied.",
+   "fact_ids": [
+    "F21"
+   ]
+  },
+  {
+   "n": 19,
+   "category": "specific_fact",
+   "text": "what deposit does Hollis want before they schedule the trench?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$1,600"
+   ],
+   "any": [],
+   "must_not": [
+    "$475",
+    "$1,380"
+   ],
+   "cite": "thread.eml",
+   "expected": "A $1,600 deposit, which Daniel approved; the balance is due only after the city inspector signs off on the open trench.",
+   "fact_ids": [
+    "F13"
+   ]
+  },
+  {
+   "n": 20,
+   "category": "specific_fact",
+   "text": "when and where is the meeting?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "6:30"
+   ],
+   "any": [
+    [
+     "May 19",
+     "19 May",
+     "2026-05-19",
+     "05-19"
+    ],
+    [
+     "garden office",
+     "office"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Tuesday, May 19 at 6:30 p.m. in the garden office.",
+   "fact_ids": [
+    "F33"
+   ]
+  },
+  {
+   "n": 21,
+   "category": "specific_fact",
+   "text": "how much did the bakery pledge?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$3,200"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Miller's Bakery pledged $3,200 toward the expansion (plus 27% of June garden loaf sales).",
+   "fact_ids": [
+    "F24"
+   ]
+  },
+  {
+   "n": 22,
+   "category": "decision",
+   "text": "what did he reject, and why?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "shed",
+    "crew leader"
+   ],
+   "any": [
+    [
+     "storage",
+     "short walk",
+     "do not own",
+     "don't own"
+    ],
+    [
+     "every other volunteer",
+     "changes how",
+     "cannot easily stop",
+     "can't easily stop",
+     "no room",
+     "under the cap"
+    ]
+   ],
+   "must_not": [
+    "rejected the greenhouse",
+    "rejects the greenhouse",
+    "no to the greenhouse"
+   ],
+   "cite": "thread.eml",
+   "expected": "The second, larger shed (the old shed is a short walk away and it would pay for storage of things they do not own) and the paid weekend crew leader (paying one volunteer changes how every other volunteer sees the work, it cannot easily be stopped, and there is no room under the cap).",
+   "fact_ids": [
+    "F16",
+    "F23"
+   ]
+  },
+  {
+   "n": 23,
+   "category": "decision",
+   "text": "what is he holding off on, and what is he waiting for before he decides?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "greenhouse"
+   ],
+   "any": [
+    [
+     "permit"
+    ],
+    [
+     "bakery sign",
+     "a sign",
+     "the sign",
+     "sign with",
+     "sign at the street",
+     "bakery's name"
+    ],
+    [
+     "Priya",
+     "partnership letter"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The greenhouse (he will decide after the permit comes back from the city) and a sign with the bakery's name (he will decide after Priya reviews the partnership letter).",
+   "fact_ids": [
+    "F17",
+    "F26"
+   ]
+  },
+  {
+   "n": 24,
+   "category": "decision",
+   "text": "what did he approve only on a condition, and what's the condition?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Oakdale"
+   ],
+   "any": [
+    [
+     "letter"
+    ],
+    [
+     "principal"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The Oakdale Elementary school program, provided the school sends a signed letter from its principal naming the supervising adults and confirming visits end before the afternoon heat.",
+   "fact_ids": [
+    "F27"
+   ]
+  },
+  {
+   "n": 25,
+   "category": "decision",
+   "text": "did he approve the greenhouse?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "defer",
+     "not yet",
+     "after the permit",
+     "hold",
+     "wait",
+     "postpon",
+     "not this season",
+     "next year",
+     "later",
+     "put off",
+     "no, not",
+     "No, not",
+     "not approv",
+     "did not approve"
+    ]
+   ],
+   "must_not": [
+    "Yes, he approved",
+    "yes, he approved",
+    "Yes, Daniel approved",
+    "approved the greenhouse this season"
+   ],
+   "cite": "thread.eml",
+   "expected": "Not this season; he deferred it and will decide after the permit comes back. The $9,750 stays in the plan as a line for next year, above the cap.",
+   "fact_ids": [
+    "F17",
+    "F19"
+   ]
+  },
+  {
+   "n": 26,
+   "category": "decision",
+   "text": "did he say yes to the second shed?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "no,",
+     "no.",
+     "No,",
+     "No.",
+     "not approv",
+     "reject",
+     "no to",
+     "No to",
+     "turned down",
+     "did not approve",
+     "does not approve",
+     "said no",
+     "declin",
+     "only one shed",
+     "one shed"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "No. He approved only one shed on skids at $1,380 and rejected the second, larger shed.",
+   "fact_ids": [
+    "F16",
+    "F15"
+   ]
+  },
+  {
+   "n": 27,
+   "category": "decision",
+   "text": "why did he say no to the paid weekend crew leader?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "every other volunteer",
+     "how every other",
+     "changes how",
+     "cannot easily stop",
+     "can't easily stop",
+     "no room",
+     "under the cap"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Paying one volunteer changes how every other volunteer sees the work, once started it cannot easily stop, and there is no room for it under the cap; he would rather rotate row captains.",
+   "fact_ids": [
+    "F23"
+   ]
+  },
+  {
+   "n": 28,
+   "category": "request_deadline",
+   "text": "what does he want me to do and by when?",
+   "flags": "",
+   "type": "list",
+   "must": [],
+   "any": [
+    [
+     "May 15",
+     "15 May",
+     "05-15"
+    ],
+    [
+     "May 21",
+     "21 May",
+     "05-21"
+    ],
+    [
+     "May 29",
+     "29 May",
+     "05-29"
+    ],
+    [
+     "budget"
+    ],
+    [
+     "contract",
+     "Hollis"
+    ],
+    [
+     "layout",
+     "captain"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Revised one-page budget at or under the cap by Friday, May 15; Hollis contract with the deposit and inspection clause by Thursday, May 21; plot layout and row captain list by Friday, May 29.",
+   "fact_ids": [
+    "F28",
+    "F29",
+    "F30"
+   ]
+  },
+  {
+   "n": 29,
+   "category": "request_deadline",
+   "text": "list the three things he asked me to send him, each with its due date",
+   "flags": "",
+   "type": "list",
+   "must": [],
+   "any": [
+    [
+     "May 15",
+     "15 May",
+     "05-15"
+    ],
+    [
+     "May 21",
+     "21 May",
+     "05-21"
+    ],
+    [
+     "May 29",
+     "29 May",
+     "05-29"
+    ],
+    [
+     "budget"
+    ],
+    [
+     "contract",
+     "Hollis"
+    ],
+    [
+     "layout",
+     "captain"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "1. Revised budget, May 15. 2. Hollis contract with deposit and inspection clause, May 21. 3. Plot layout and row captain list, May 29.",
+   "fact_ids": [
+    "F28",
+    "F29",
+    "F30"
+   ]
+  },
+  {
+   "n": 30,
+   "category": "request_deadline",
+   "text": "when does he need the revised budget, and what should it look like?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 15",
+     "15 May",
+     "05-15"
+    ],
+    [
+     "line items",
+     "same line",
+     "Priya",
+     "side by side",
+     "compare",
+     "under the",
+     "$34,000",
+     "34,000",
+     "one-page",
+     "one page"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "By Friday, May 15: a one-page budget at or under the $34,000 cap, keeping the same line items so Priya can compare side by side.",
+   "fact_ids": [
+    "F28"
+   ]
+  },
+  {
+   "n": 31,
+   "category": "request_deadline",
+   "text": "by when does he want the Hollis contract, and what has to be written into it?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 21",
+     "21 May",
+     "05-21"
+    ],
+    [
+     "inspection",
+     "deposit"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "By Thursday, May 21, with the $1,600 deposit and the inspection clause (balance due only after the city inspector signs off) written in.",
+   "fact_ids": [
+    "F29"
+   ]
+  },
+  {
+   "n": 32,
+   "category": "absence",
+   "text": "does he say anything about parking?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 33,
+   "category": "absence",
+   "text": "what did he decide about insurance for the new lot?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 34,
+   "category": "absence",
+   "text": "did they discuss solar panels for the greenhouse?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 35,
+   "category": "absence",
+   "text": "what did Priya reply?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [
+    [
+     "did not write",
+     "didn't write",
+     "did not reply",
+     "didn't reply",
+     "did not send",
+     "didn't send",
+     "did not respond",
+     "didn't respond",
+     "no message",
+     "no reply",
+     "no response",
+     "never wrote",
+     "never replied",
+     "never sent",
+     "never responded",
+     "not specified",
+     "not reply",
+     "not write",
+     "not respond",
+     "only cc",
+     "only copied",
+     "cc'd",
+     "cc'ed",
+     "copied on",
+     "wrote nothing",
+     "not contain",
+     "no email",
+     "does not include",
+     "doesn't include",
+     "not appear",
+     "nothing from Priya",
+     "no messages from",
+     "cannot answer",
+     "can't answer",
+     "not able to",
+     "unable to",
+     "not found",
+     "cannot find",
+     "can't find",
+     "no information",
+     "not enough information",
+     "not in the"
+    ]
+   ],
+   "must_not": [
+    "Priya replied that",
+    "Priya wrote that",
+    "Priya's reply",
+    "Priya responded that",
+    "Priya sent a"
+   ],
+   "cite": "thread.eml",
+   "expected": "Priya did not write any message in the thread; she was only cc'd on Daniel's May 7 reply. Daniel reports her view secondhand.",
+   "fact_ids": []
+  },
+  {
+   "n": 36,
+   "category": "attribution",
+   "text": "what did Maya ask in her follow-up?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "deposit"
+   ],
+   "any": [
+    [
+     "expansion account",
+     "general account",
+     "which account",
+     "account"
+    ],
+    [
+     "compost",
+     "raised beds",
+     "35%"
+    ],
+    [
+     "Oakdale",
+     "June",
+     "fall",
+     "school",
+     "start"
+    ]
+   ],
+   "must_not": [
+    "wheelchair",
+    "fence"
+   ],
+   "cite": "thread.eml",
+   "expected": "1. Should the $1,600 Hollis deposit come from the general account or the expansion account? 2. Does the 35% compost limit apply to raised beds too? 3. Should the Oakdale program start in June or wait until fall?",
+   "fact_ids": [
+    "F34"
+   ]
+  },
+  {
+   "n": 37,
+   "category": "attribution",
+   "text": "what did Daniel answer in his second reply?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "expansion account"
+   ],
+   "any": [
+    [
+     "half",
+     "in-ground",
+     "raised beds"
+    ],
+    [
+     "principal",
+     "wait",
+     "walk"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Deposit comes from the expansion account (Priya writes the check when the countersigned contract arrives); the compost limit applies only to in-ground plots, raised beds can be up to half compost; the program start stays open until he walks the lot with the Oakdale principal; and the shed moves to the east corner by the gate because the north line is in the setback.",
+   "fact_ids": [
+    "F35",
+    "F36",
+    "F37",
+    "F38"
+   ]
+  },
+  {
+   "n": 38,
+   "category": "attribution",
+   "text": "which of Maya's three questions did he not really answer?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "third",
+     "Oakdale",
+     "school program",
+     "program start",
+     "start season",
+     "June or fall",
+     "when to start",
+     "start in June",
+     "hold it until",
+     "start the program",
+     "program's start",
+     "when the program"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The third one, whether the Oakdale program starts in June or the fall; he deferred it until he has walked the lot with the principal.",
+   "fact_ids": [
+    "F37"
+   ]
+  },
+  {
+   "n": 39,
+   "category": "attribution",
+   "text": "list the items Daniel deferred in his May 7 reply",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "greenhouse"
+   ],
+   "any": [
+    [
+     "bakery sign",
+     "a sign",
+     "the sign",
+     "sign with",
+     "sign at the street",
+     "bakery's name"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "1. The greenhouse (decide after the permit comes back). 2. The sign with the bakery's name (decide after Priya reviews the partnership letter).",
+   "fact_ids": [
+    "F17",
+    "F26"
+   ]
+  },
+  {
+   "n": 40,
+   "category": "clarification",
+   "text": "what does he mean by 'the two-season rule'?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "permanent"
+   ],
+   "any": [
+    [
+     "two full seasons",
+     "two seasons",
+     "spring",
+     "fall"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Nothing permanent (anything with a footing, pad, or foundation that cannot be moved by truck and volunteers) gets built on the new lot until it has been gardened through two full seasons, one spring and one fall.",
+   "fact_ids": [
+    "F07"
+   ]
+  },
+  {
+   "n": 41,
+   "category": "clarification",
+   "text": "what does Priya think about the plan?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "water line"
+   ],
+   "any": [
+    [
+     "cut"
+    ]
+   ],
+   "must_not": [
+    "Priya replied that",
+    "Priya wrote that",
+    "Priya's reply",
+    "Priya's email"
+   ],
+   "cite": "thread.eml",
+   "expected": "As Daniel reports it: the water line is the one item that cannot be cut, and the bakery money is a pledge, not cash in the bank, so the cap does not assume it.",
+   "fact_ids": [
+    "F06"
+   ]
+  },
+  {
+   "n": 42,
+   "category": "change",
+   "text": "what did he change between his first reply and his second one?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "shed"
+   ],
+   "any": [
+    [
+     "east corner",
+     "by the gate",
+     "gate"
+    ],
+    [
+     "setback",
+     "north"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The shed location: he first said the north fence, then moved it to the east corner by the gate because Lena said the north line is inside the city's setback.",
+   "fact_ids": [
+    "F38"
+   ]
+  },
+  {
+   "n": 43,
+   "category": "change",
+   "text": "what number did he change from Maya's plan?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$34,000"
+   ],
+   "any": [
+    [
+     "$41,250",
+     "41,250"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The total budget: Maya proposed $41,250 and he lowered the cap to $34,000.",
+   "fact_ids": [
+    "F02",
+    "F05"
+   ]
+  },
+  {
+   "n": 44,
+   "category": "trap",
+   "text": "what does his reply say the soil delivery will cost?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$2,850"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "$2,850, the quote from last year's yard, delivered and dumped in one load.",
+   "fact_ids": [
+    "F11"
+   ]
+  },
+  {
+   "n": 45,
+   "category": "trap",
+   "text": "what dimensions does he give for each in-ground plot?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  }
+ ]
+}

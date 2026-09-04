@@ -77,6 +77,7 @@ Commands:
 | `/matters` | list the matters |
 | `/reingest` | convert new files, rebuild the index, show coverage |
 | `/reason <question>` | think first, then compute and compare over the sources; conclusions are labeled `[INFERENCE]` (slower, lower trust) |
+| `/summarize [folder\|file]` | cited bullets over every chunk of the scope (a read, not a search); no value = the current scope |
 | `/think [on\|off]` | show the `/reason` thinking trace in gray as it streams; no value toggles (default on; off shows a counter instead) |
 | `/clear` | forget the previous turn, so the next `/reason` starts fresh |
 | `/note` | save the last answer as a file under `docs/model-notes/` (derived, see below); `/note drop` deletes it |
@@ -198,12 +199,52 @@ Each question runs through a fixed pipeline:
 | `.md` `.txt` | natively; pdftotext form feeds become `page N` labels |
 | `.pptx` | natively; one section per slide, `slide N`, shapes read in column order |
 | `.docx` | natively; Heading styles become chunk headings, tables stay whole |
-| `.eml` | natively; heading is `date From -> To`, attachments are listed, not extracted |
+| `.eml` | natively; a quoted chain (Outlook, Gmail, Apple Mail, Korean Outlook, forward-as-attachment) is split into its messages, each under its own `date From -> To` heading, plus a thread overview; attachments are listed, not extracted |
 | `.pdf` | converted at ingest with `pdftotext -layout` into a same-stem `.txt` |
 | `.doc` `.rtf` `.html` | converted at ingest with `textutil` into a same-stem `.docx` |
 | `.ppt` | converted at ingest with LibreOffice `soffice` into a same-stem `.pptx` |
 | `.msg` `.pages` `.key` `.xlsx` | not read; export by hand (coverage says how) |
 | images, scanned PDFs | not read; no local OCR pass yet |
+
+### Email threads
+
+Save a thread the way your mail client offers (forward it to yourself, or open the
+last reply, then Save As `.eml`); the quoted history inside the body is enough. At
+ingest the chain is split into its messages, oldest first. Each message gets its own
+`date From -> To` heading (so the speaker check knows who wrote what) and a first
+line that says "Message 2 of 5, sent Thursday, May 7, 2026 by ...". A short
+`thread overview` chunk lists every message with its date, sender and subject, and
+rides along as an extra source whenever an email chunk is retrieved, so "what day
+did he reply" and "who wrote last" are answered from it. Recognised quoting styles:
+Outlook header blocks (English, Korean, German, French labels), `-----Original
+Message-----`, Gmail and Apple Mail `On <date>, <name> wrote:` (also when wrapped or
+nested with `>`), and a forward-as-attachment (`message/rfc822`).
+
+Questions about a thread are routed deterministically, and the audit line records
+the routing (`email_target`, `gathered`):
+
+- A question that names a sender ("what did Daniel reject") is about that person.
+  "he", "she" or "they" with no name means the one counterparty when the thread was
+  forwarded to yourself (you are the self-sender) or when `run-config.json` lists
+  you under `me`; with several counterparties it means nobody and the question runs
+  as a plain search. A date ("his May 7 email", "on 5/11") or an ordinal ("her
+  second reply", "the latest message") narrows it to that message.
+- When the targeted messages are small enough (24 chunks, about 6k tokens) they are
+  READ whole, in order, after the overview: a question about a person is answered
+  from everything that person wrote, so "what did he reject" works even though the
+  reply says "I am not approving" and never "reject". The sources line says
+  `read N chunks: ...` and the audit line records `gathered`.
+- A broad question ("summarize his reply", "what did he say in general", "main
+  points", "overview") is read even when the target is bigger, up to 40 chunks
+  (about 10k tokens); above that a per-message subset is read and a `COVERAGE`
+  warning says how many chunks were left out. The refusal gate does not apply to a
+  read; the model still answers "Not specified" when the messages do not say.
+- Everything else is the normal search, with two extras: the thread overview rides
+  along with any email hit, and the best dense (cosine) chunk rides along when the
+  fused ranking left it out and it clears the dense gate, so a paraphrase the words
+  missed ("meet" for "meeting") costs one extra source, not the answer.
+- For a full, cited bullet summary of one file use `/summarize thread.eml` (or
+  `summarize --only thread.eml` on the command line).
 
 Conversion uses local command-line tools only, so nothing leaves the machine.
 A missing tool leaves the file skipped and `coverage` names the tool. A

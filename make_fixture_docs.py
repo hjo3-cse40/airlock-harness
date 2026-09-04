@@ -84,6 +84,49 @@ def write_eml(path, sender, to, date, subject, body, attachment=None):
     with open(path, "wb") as f:
         f.write(bytes(m))
 
+CHAIN_PEOPLE = {"maya": "Maya Reyes <m.reyes@riversidegarden.example>",
+                "daniel": "Daniel Okonkwo <d.okonkwo@riversidegarden.example>",
+                "priya": "Priya Nair <p.nair@riversidegarden.example>"}
+# (sender, to, cc, iso date, Outlook 'Sent' text, subject, body), oldest first
+CHAIN = [
+    ("maya", "daniel", None, "2026-05-04", "Monday, May 4, 2026 10:30 AM",
+     "Expansion plan: one-page proposal for your approval",
+     "Hi Daniel,\n\nAttached is the one-page plan. I propose a total of $41,300 and a June start.\n\n"
+     "Four asks:\n1. Approve the budget.\n2. Approve the greenhouse.\n3. Let me hire two seasonal helpers.\n"
+     "4. Sign the permit form.\n\nThanks,\nMaya"),
+    ("daniel", "maya", "priya", "2026-05-07", "Thursday, May 7, 2026 9:12 AM",
+     "RE: Expansion plan: one-page proposal for your approval",
+     "Maya,\n\nThank you for the plan. I approve it in principle with changes.\n\nBudget\n\n"
+     "I am lowering the cap to $36,800. The city permit fee is $325 and is paid to the city, not from our budget.\n\n"
+     "Greenhouse\n\nNo to the greenhouse this year; the frame alone is $9,400.\n\nHelpers\n\n"
+     "Yes to two seasonal helpers, provided that Priya confirms the payroll line by May 20.\n\n"
+     "The Two-Season Rule\n\nWe do not build anything we cannot maintain for two full seasons.\n\n"
+     "Next meeting: Thursday, May 14 at 3:00 PM.\n\nDaniel"),
+    ("maya", "daniel", None, "2026-05-08", "Friday, May 8, 2026 4:40 PM",
+     "RE: Expansion plan: one-page proposal for your approval",
+     "Thanks Daniel. Three questions:\n\n1. Does the cap include the soil delivery?\n"
+     "2. Can the helpers start before the permit?\n3. Will you reconsider the greenhouse in the fall?\n\nMaya"),
+    ("daniel", "maya", None, "2026-05-11", "Monday, May 11, 2026 11:05 AM",
+     "RE: Expansion plan: one-page proposal for your approval",
+     "Maya,\n\n1. Yes, the cap includes the soil delivery.\n2. No, the helpers start after the permit is signed.\n"
+     "3. On your third question, I'd rather wait until the fall budget review.\n\nDaniel"),
+]
+
+def write_chain_eml(path):
+    """A self-forwarded Outlook-style chain: the forward on top, then every message
+    newest first under a From/Sent/To/Cc/Subject block. The parser must split it
+    into five messages, oldest first, each under its own heading."""
+    body = ["Saving this thread for my records.", ""]
+    for sender, to, cc, _iso, sent, subject, text in reversed(CHAIN):
+        body += ["", "________________________________",
+                 f"From: {CHAIN_PEOPLE[sender]}", f"Sent: {sent}", f"To: {CHAIN_PEOPLE[to]}"]
+        if cc:
+            body.append(f"Cc: {CHAIN_PEOPLE[cc]}")
+        body += [f"Subject: {subject}", ""] + text.split("\n")
+    write_eml(path, CHAIN_PEOPLE["maya"], CHAIN_PEOPLE["maya"], "Tue, 12 May 2026 08:05:00 -0700",
+              "FW: Expansion plan: one-page proposal for your approval", "\n".join(body) + "\n",
+              attachment="expansion-plan.pdf")
+
 def _textutil(src, fmt, dst):
     if shutil.which("textutil"):
         subprocess.run(["textutil", "-convert", fmt, "-output", dst, src], check=True)
@@ -116,6 +159,7 @@ def build_fixtures():
               "Firm Lima can start after a retainer of 2,400 dollars is received.\n\n"
               "Our fee proposal is attached.\n",
               attachment="lima-proposal.pdf")
+    write_chain_eml(os.path.join(FIX, "chain.eml"))
 
 def build_probe():
     docs = os.path.join(PROBE, "docs")

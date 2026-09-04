@@ -17,7 +17,7 @@ a same-stem sidecar; coverage names any file that is still not indexed.
 """
 import argparse, hashlib, json, math, os, re, sys, time, urllib.request, urllib.error
 import zipfile, tempfile, xml.etree.ElementTree as ET
-import shutil, subprocess, html, email, email.policy, email.utils, email.header, unicodedata
+import shutil, subprocess, html, email, email.policy, email.utils, email.header, unicodedata, datetime
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 SERVER = "http://127.0.0.1:1234/v1"
@@ -72,7 +72,7 @@ def tokenize(text):
 
 # ---------------- chunking ----------------
 
-CHUNK_VERSION = 5  # bump when chunking/embedding logic changes, forces re-index
+CHUNK_VERSION = 7  # bump when chunking/embedding logic changes, forces re-index (7: .eml chains split per message)
 
 # ---------------- pptx ----------------
 
@@ -291,68 +291,379 @@ def docx_lines(path):
     walk(body)
     return lines
 
-# ---------------- eml (stdlib email) ----------------
+# ---------------- eml (stdlib email): one file = one message, its quoted chain split into messages ----------------
+
+# ---- headers of a quoted message block (Outlook, Gmail forward, Korean Outlook) ----
+_HDR_KEYS = {
+    "from": "from", "sent": "date", "date": "date", "to": "to", "cc": "cc", "subject": "subject",
+    "보낸 사람": "from", "보낸사람": "from", "보낸 날짜": "date", "보낸날짜": "date", "날짜": "date",
+    "받는 사람": "to", "받는사람": "to", "참조": "cc", "제목": "subject",
+    "von": "from", "gesendet": "date", "an": "to", "betreff": "subject",       # German Outlook
+    "de": "from", "envoyé": "date", "à": "to", "objet": "subject",             # French Outlook
+}
+_HDR_RE = re.compile(r"^\s*\*{0,2}(" + "|".join(re.escape(k) for k in sorted(_HDR_KEYS, key=len, reverse=True))
+                     + r")\*{0,2}\s*[:：]\s*(.*)$", re.I)
+_QUOTE_PREFIX = re.compile(r"^\s*(?:>\s?)+")
+_SEPARATORS = re.compile(r"^\s*(-{3,}\s*(Original Message|Ursprüngliche Nachricht|Message d'origine|원본 메일|원본 메시지)\s*-{3,}"
+                         r"|_{10,}|-{5,}\s*Forwarded message\s*-{5,}|-{10,})\s*$", re.I)
+# "On <date>, <name> <addr> wrote:"   (Gmail / Apple Mail / Thunderbird), possibly wrapped over two lines
+_WROTE_RE = re.compile(r"^\s*(?:On|Am|Le|El)\s+(.+?)\s*(?:wrote|writes|schrieb|a écrit|escribió)\s*:\s*$", re.I | re.S)
+_KO_WROTE_RE = re.compile(r"^\s*(.+?)\s*님이\s*작성\s*:\s*$")
+_ADDR_RE = re.compile(r"<([^<>@\s]+@[^<>\s]+)>")
+_BARE_ADDR_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+
+_MONTHS = {m: i for i, m in enumerate(
+    ["january", "february", "march", "april", "may", "june", "july", "august",
+     "september", "october", "november", "december"], 1)}
+_MONTHS.update({m[:3]: i for m, i in list(_MONTHS.items())})
+_MONTHS.update({"sept": 9})
+_WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+def parse_loose_date(s):
+    """'Thursday, May 7, 2026 9:12 AM' / 'Thu, May 7, 2026 at 9:12 AM' / '7 May 2026 09:12' /
+    '2026-05-07 09:12' / '2026년 5월 7일 (목) 오전 9:12' / '07.05.2026' -> 'YYYY-MM-DD' or ''."""
+    if not s:
+        return ""
+    s = s.strip()
+    try:
+        d = email.utils.parsedate_to_datetime(s)
+        if d:
+            return d.strftime("%Y-%m-%d")
+    except (TypeError, ValueError, IndexError):
+        pass
+    m = re.search(r"(20\d\d|19\d\d)년\s*(\d{1,2})월\s*(\d{1,2})일", s)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    m = re.search(r"\b(20\d\d|19\d\d)[-/.](\d{1,2})[-/.](\d{1,2})\b", s)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    low = s.lower()
+    m = re.search(r"\b([a-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(20\d\d|19\d\d)\b", low)   # May 7, 2026
+    if m and m.group(1) in _MONTHS:
+        return f"{int(m.group(3)):04d}-{_MONTHS[m.group(1)]:02d}-{int(m.group(2)):02d}"
+    m = re.search(r"\b(\d{1,2})\.?\s+([a-z]{3,9})\.?,?\s+(20\d\d|19\d\d)\b", low)              # 7 May 2026
+    if m and m.group(2) in _MONTHS:
+        return f"{int(m.group(3)):04d}-{_MONTHS[m.group(2)]:02d}-{int(m.group(1)):02d}"
+    m = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(20\d\d|19\d\d)\b", s)                              # 07.05.2026 (day first)
+    if m:
+        return f"{int(m.group(3)):04d}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    m = re.search(r"\b(\d{1,2})/(\d{1,2})/(20\d\d|19\d\d)\b", s)                                 # 5/7/2026 (US, month first)
+    if m:
+        return f"{int(m.group(3)):04d}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+    m = re.search(r"\b(\d{1,2})/(\d{1,2})/(\d\d)\b", s)                                          # 5/7/26 (Thunderbird)
+    if m:
+        return f"20{int(m.group(3)):02d}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+    return ""
+
+def human_date(iso):
+    try:
+        d = datetime.date.fromisoformat(iso)
+        return f"{_WEEKDAYS[d.weekday()]}, {d.strftime('%B')} {d.day}, {d.year}"
+    except (ValueError, TypeError):
+        return ""
+
+def clean_party(s):
+    """'Daniel Okonkwo <d.okonkwo@x.example>' -> same; "'Daniel Okonkwo' <..>" -> unquoted;
+    'mailto:' links and stray brackets removed."""
+    s = (s or "").strip().strip(";").strip()
+    s = re.sub(r"\[mailto:[^\]]*\]", "", s)
+    s = re.sub(r"\(mailto:[^)]*\)", "", s)
+    s = s.replace(" ", " ")
+    parts = []
+    for name, addr in email.utils.getaddresses([s]):
+        name = name.strip().strip("'\"")
+        if name and addr and "@" in addr:
+            parts.append(f"{name} <{addr}>")
+        elif name or addr:
+            parts.append(name or addr)
+    return ", ".join(parts) if parts else s
+
+def display_name(party):
+    """'Daniel Okonkwo <d@x>' -> 'Daniel Okonkwo'; 'd@x' -> 'd@x'."""
+    party = party or ""
+    m = re.match(r"\s*\"?([^<\"]+?)\"?\s*<", party)
+    return m.group(1).strip() if m else party.strip()
+
+_TIME_RE = re.compile(r"\d{1,2}:\d{2}(?::\d{2})?\s*(?:[AaPp]\.?[Mm]\.?|오전|오후)?(?:\s*[A-Z]{2,4}|\s*[+-]\d{4})?")
+
+def _trailing_name(s):
+    """The person's name at the END of an 'On <date> <time> <name>' fragment: the text after
+    the last time-of-day, else after the last comma, else the whole fragment."""
+    s = s.strip().rstrip(",").strip()
+    last = None
+    for m in _TIME_RE.finditer(s):
+        last = m
+    if last:
+        tail = s[last.end():]
+    elif "," in s:
+        tail = s.rsplit(",", 1)[1]
+    else:
+        tail = s
+    tail = re.sub(r"^\s*(?:,|at|um|à|,\s*at)\s+", "", tail.strip(), flags=re.I)
+    return tail.strip().strip("'\"").strip()
+
+def _wrote_parts(line):
+    """'Thu, May 7, 2026 at 9:12 AM Daniel Okonkwo <d@x>' (the middle of an On ... wrote: line)
+    -> (date_iso, party)."""
+    body = line.strip()
+    addr = _ADDR_RE.search(body)
+    date = parse_loose_date(body)
+    if addr:
+        name = _trailing_name(body[:addr.start()])
+        if _TIME_RE.fullmatch(name or "x") or re.fullmatch(r"[\d\s,:]+", name or "x"):
+            name = ""
+        party = f"{name} <{addr.group(1)}>" if name else addr.group(1)
+    else:
+        bare = _BARE_ADDR_RE.search(body)
+        if bare:
+            name = _trailing_name(body[:bare.start()])
+            party = f"{name} <{bare.group(0)}>" if name else bare.group(0)
+        else:
+            party = _trailing_name(body)
+            if parse_loose_date(party) or re.fullmatch(r"[\d\s,:]+", party or ""):
+                party = ""
+    return date, party
+
+def split_thread(lines):
+    """lines = the body of one message (quote markers allowed). Returns a list of dicts
+    {from, to, cc, date, subject, lines} in FILE order: the top message first, then each
+    quoted message as it appears. The top message has empty header fields (the caller
+    fills them from the real headers)."""
+    raw = [l.rstrip("\r") for l in lines]
+    stripped = [_QUOTE_PREFIX.sub("", l) for l in raw]
+    msgs = [{"from": "", "to": "", "cc": "", "date": "", "subject": "", "lines": []}]
+    i, n = 0, len(stripped)
+    while i < n:
+        line = stripped[i]
+        # 1. separator lines: drop them, they only announce a header block
+        if _SEPARATORS.match(line):
+            i += 1
+            continue
+        # 2. Outlook / forward header block: From: ... then Sent|Date: ... and To: ... within 8 lines
+        m = _HDR_RE.match(line)
+        if m and _HDR_KEYS[m.group(1).lower()] == "from":
+            block, j = {}, i
+            while j < n and j < i + 8:
+                mm = _HDR_RE.match(stripped[j])
+                if not mm:
+                    if stripped[j].strip() and j > i and stripped[j].startswith((" ", "\t")):
+                        j += 1; continue          # folded continuation line
+                    break
+                key = _HDR_KEYS[mm.group(1).lower()]
+                if key in block and key == "from":
+                    break                          # a second From: starts another block
+                block[key] = mm.group(2).strip()
+                j += 1
+            if "date" in block and ("to" in block or "subject" in block):
+                msgs.append({"from": clean_party(block.get("from", "")), "to": clean_party(block.get("to", "")),
+                             "cc": clean_party(block.get("cc", "")), "date": parse_loose_date(block.get("date", "")),
+                             "date_raw": block.get("date", ""), "subject": block.get("subject", ""), "lines": []})
+                i = j
+                continue
+        # 3. "On <date>, <name> wrote:" (maybe wrapped onto the next line)
+        cand = line
+        joined = 1
+        if not _WROTE_RE.match(cand) and i + 1 < n and re.match(r"^\s*(On|Am|Le|El)\s", cand) \
+                and re.search(r"(wrote|writes|schrieb|a écrit|escribió)\s*:\s*$", stripped[i + 1]):
+            cand = cand.rstrip() + " " + stripped[i + 1].strip()
+            joined = 2
+        mw = _WROTE_RE.match(cand)
+        mk = _KO_WROTE_RE.match(cand) if not mw else None
+        if mw or mk:
+            date, party = _wrote_parts((mw or mk).group(1))
+            if date or party:
+                prev = msgs[-1]
+                msgs.append({"from": party, "to": "", "cc": "", "date": date, "date_raw": (mw or mk).group(1),
+                             "subject": "", "lines": [], "_reply_to": prev})
+                i += joined
+                continue
+        msgs[-1]["lines"].append(line)
+        i += 1
+    # a quoted message named only by "wrote:" was addressed to whoever quoted it
+    for k in range(1, len(msgs)):
+        if not msgs[k]["to"]:
+            outer = msgs[k - 1]
+            msgs[k]["to"] = outer["from"] or "(the message above)"
+    for m in msgs:
+        m.pop("_reply_to", None)
+        # trim leading/trailing blank lines
+        while m["lines"] and not m["lines"][0].strip():
+            m["lines"].pop(0)
+        while m["lines"] and not m["lines"][-1].strip():
+            m["lines"].pop()
+    return msgs
+
+
+# ---- .eml -> lines (replacement for ask.py eml_lines) ----
 
 def _strip_html(s):
-    s = re.sub(r"(?is)<(script|style).*?</\1>", "", s)
-    s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</li>|</h\d>", "\n", s)
+    s = re.sub(r"(?is)<(script|style|head).*?</\1>", "", s)
+    s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</li>|</h\d>|</blockquote>|</table>", "\n", s)
+    s = re.sub(r"(?i)<p[^>]*>|<div[^>]*>|<blockquote[^>]*>", "\n", s)
     s = re.sub(r"<[^>]+>", "", s)
-    return html.unescape(s)
+    s = html.unescape(s).replace(" ", " ")
+    s = re.sub(r"[ \t]+\n", "\n", s)
+    return re.sub(r"\n{3,}", "\n\n", s)
 
-def eml_lines(path):
-    """Lines of an .eml. The heading is 'YYYY-MM-DD From -> To', the same
-    shape the markdown threads use, so the attribution check can read the
-    speaker off the heading. Attachments are LISTED, not extracted: save them
-    beside the .eml so coverage sees them."""
+def _decode_header(hdr, h):
+    v = hdr.get(h, "") or ""
+    try:
+        return str(email.header.make_header(email.header.decode_header(v)))
+    except (UnicodeDecodeError, LookupError, ValueError):
+        return v
+
+def _who(hdr, h):
+    raw = _decode_header(hdr, h)
+    parts = []
+    for name, addr in email.utils.getaddresses([raw]):
+        m = re.search(r'"?([^,<"]*?)"?\s*<' + re.escape(addr) + r">", raw) if addr else None
+        if m and m.group(1).strip():
+            name = m.group(1).strip()
+        if name and addr:
+            parts.append(f"{name} <{addr}>")
+        elif name or addr:
+            parts.append(name or addr)
+    return ", ".join(parts)
+
+def _body_text(msg):
+    """The text of one email.message.EmailMessage: preferred plain, else html stripped;
+    falls back to the first text part even when it is flagged as an attachment."""
+    body = None
+    try:
+        body = msg.get_body(preferencelist=("plain", "html"))
+    except Exception:
+        body = None
+    if body is None:
+        for part in msg.walk():
+            if part.get_content_type() in ("text/plain", "text/html"):
+                body = part
+                break
+    if body is None:
+        return ""
+    try:
+        text = body.get_content()
+    except (LookupError, UnicodeDecodeError, KeyError):
+        payload = body.get_payload(decode=True) or b""
+        text = payload.decode(body.get_content_charset() or "utf-8", "replace")
+    if body.get_content_type() == "text/html":
+        text = _strip_html(text)
+    return text
+
+def messages_of(msg, hdr=None):
+    """All messages held by one EmailMessage: itself (split into its quoted chain) plus any
+    message/rfc822 attachments (forward-as-attachment), recursively. Returns dicts with
+    from/to/cc/date/subject/lines/attachments, FILE order."""
+    hdr = hdr or msg
+    top_from, top_to, top_cc = _who(hdr, "From"), _who(hdr, "To"), _who(hdr, "Cc")
+    top_date = parse_loose_date(_decode_header(hdr, "Date"))
+    subject = _decode_header(hdr, "Subject")
+    parts = split_thread(_body_text(msg).splitlines())
+    parts[0].update({"from": top_from, "to": top_to, "cc": top_cc, "date": top_date, "subject": subject})
+    base_subject = re.sub(r"(?i)^\s*(?:(?:re|aw|sv|fw|fwd|wg|tr|답장|전달)\s*:\s*)+", "", subject or "").strip()
+    for k in range(1, len(parts)):
+        if parts[k]["to"] == "(the message above)":
+            parts[k]["to"] = parts[k - 1]["from"] or top_from
+        if not parts[k]["subject"]:
+            parts[k]["subject"] = base_subject
+            parts[k]["subject_inherited"] = True
+    atts, nested = [], []
+    for p in msg.iter_attachments():
+        if p.get_content_type() == "message/rfc822":
+            inner = p.get_payload(0) if isinstance(p.get_payload(), list) else None
+            if inner is not None:
+                nested.extend(messages_of(inner))
+                continue
+        name = p.get_filename()
+        if name:
+            atts.append(name)
+    parts[0]["attachments"] = atts
+    return parts + nested
+
+def eml_sections(path):
+    """Lines for the chunker plus {heading: meta} for every message in the file."""
     with open(path, "rb") as f:
         data = f.read()
-    msg = email.message_from_bytes(data, policy=email.policy.default)   # body walking
-    hdr = email.message_from_bytes(data)                                # raw headers
-    def header(h):
-        v = hdr.get(h, "") or ""
-        try:
-            return str(email.header.make_header(email.header.decode_header(v)))
-        except (UnicodeDecodeError, LookupError, ValueError):
-            return v
-    def who(h):
-        raw = header(h)
-        parts = []
-        for name, addr in email.utils.getaddresses([raw]):
-            # keep the display name as written: the RFC parser drops a
-            # parenthesised org like 'R. Chen (Firm Victor)' as a comment,
-            # and that org is what the attribution check matches on
-            m = re.search(r'"?([^,<"]*?)"?\s*<' + re.escape(addr) + r">", raw) if addr else None
-            if m and m.group(1).strip():
-                name = m.group(1).strip()
-            if name and addr:
-                parts.append(f"{name} <{addr}>")
-            elif name or addr:
-                parts.append(name or addr)
-        return ", ".join(parts)
-    sender, to = who("From"), who("To")
-    date = ""
-    try:
-        d = email.utils.parsedate_to_datetime(header("Date")) if header("Date") else None
-        if d:
-            date = d.strftime("%Y-%m-%d")
-    except (TypeError, ValueError):
-        pass
-    head = " ".join(x for x in (date, f"{sender} -> {to}" if (sender or to) else "") if x).strip()
-    lines = ["# " + (head or "email"), f"Subject: {header('Subject') or '(none)'}", ""]
-    body = msg.get_body(preferencelist=("plain", "html"))
-    text = ""
-    if body is not None:
-        try:
-            text = body.get_content()
-        except (LookupError, UnicodeDecodeError):
-            text = body.get_payload(decode=True).decode("utf-8", "replace")
-        if body.get_content_type() == "text/html":
-            text = _strip_html(text)
-    lines += [l.rstrip() for l in text.splitlines()]
-    atts = [p.get_filename() for p in msg.iter_attachments() if p.get_filename()]
-    if atts:
-        lines += ["", "Attachments (listed, not extracted): " + ", ".join(atts)]
-    return lines
+    msg = email.message_from_bytes(data, policy=email.policy.default)
+    hdr = email.message_from_bytes(data)
+    msgs = messages_of(msg, hdr)
+    # chronological order when every message has a date; else keep file order reversed (newest last)
+    if all(m.get("date") for m in msgs):
+        order = sorted(range(len(msgs)), key=lambda k: (msgs[k]["date"], -k))
+    else:
+        order = list(range(len(msgs) - 1, -1, -1))
+    msgs = [msgs[k] for k in order]
+    total = len(msgs)
+    names = []
+    for m in msgs:
+        for p in (m["from"], m["to"]):
+            dn = display_name(p)
+            if dn and dn not in names:
+                names.append(dn)
+    lines, metas = [], {}
+    self_senders = {display_name(m["from"]) for m in msgs
+                    if m["from"] and display_name(m["from"]) == display_name(m["to"])}
+    if total > 1:
+        ov_head = f"thread overview ({', '.join(names)})"
+        metas[ov_head] = {"overview": True, "of": total, "senders": sorted({display_name(m["from"]) for m in msgs if m["from"]}),
+                          "self_senders": sorted(self_senders)}
+        lines += ["# " + ov_head,
+                  f"This file holds {total} messages of one email thread, oldest first:"]
+        for i, m in enumerate(msgs, 1):
+            subj = m.get("subject") or ""
+            if m.get("subject_inherited"):
+                verb = "wrote" if i == 1 else "replied"
+            elif re.match(r"(?i)\s*(re|aw|sv|답장)\s*:", subj):
+                verb = "replied"
+            elif re.match(r"(?i)\s*(fw|fwd|wg|tr|전달)\s*:", subj):
+                verb = "forwarded"
+            else:
+                verb = "wrote"
+            when = m["date"] or m.get("date_raw") or "(no date)"
+            hd = human_date(m["date"]) if m["date"] else ""
+            is_self = m["from"] and display_name(m["from"]) == display_name(m["to"])
+            if is_self:
+                last_real = max((k for k, mm in enumerate(msgs, 1)
+                                 if not (mm["from"] and display_name(mm["from"]) == display_name(mm["to"]))), default=0)
+                lines.append(f"Message {i} of {total}: {display_name(m['from'])} {verb} the thread to themselves on {when}"
+                             + (f" ({hd})" if hd else "") + " (a copy for filing, not part of the conversation"
+                             + (f"; the conversation ends with message {last_real}" if last_real and last_real < i else "") + ")")
+                continue
+            lines.append(f"Message {i} of {total}: {display_name(m['from']) or '(unknown sender)'} {verb} to "
+                         f"{display_name(m['to']) or '(unknown)'} on {when}" + (f" ({hd})" if hd else "")
+                         + (f", subject: {m['subject']}" if m.get("subject") else ""))
+        lines.append("")
+    for i, m in enumerate(msgs, 1):
+        head = " ".join(x for x in (m["date"], f"{m['from']} -> {m['to']}" if (m["from"] or m["to"]) else "") if x).strip()
+        head = head or "email"
+        metas.setdefault(head, {"n": i, "of": total, "from": display_name(m["from"]), "to": display_name(m["to"]),
+                                "date": m["date"], "self": display_name(m["from"]) in self_senders})
+        lines.append("# " + head)
+        lines.append(f"Subject: {m.get('subject') or '(none)'}")
+        if total > 1:
+            hd = human_date(m["date"]) if m["date"] else (m.get("date_raw") or "")
+            lines.append(f"Message {i} of {total} in this thread, sent {hd or m['date'] or 'on an unknown date'}"
+                         f" by {display_name(m['from']) or 'an unknown sender'}"
+                         + (f", cc {display_name(m['cc'])}" if m.get("cc") else "") + ".")
+        lines.append("")
+        lines += [l.rstrip() for l in m["lines"]]
+        if m.get("attachments"):
+            lines += ["", "Attachments (listed, not extracted): " + ", ".join(m["attachments"])]
+        lines.append("")
+    return lines, metas
+
+def eml_lines(path):
+    return eml_sections(path)[0]
+
+def chunk_eml(path, rel):
+    """Chunks of an .eml; each carries the message it belongs to under 'email'
+    (n / of / from / to / date / self), read off its heading."""
+    lines, metas = eml_sections(path)
+    chunks = _merge_and_id(_chunk_lines(lines, rel, ""), rel)
+    for c in chunks:
+        m = metas.get(c["heading"])
+        if m:
+            c["email"] = m
+    return chunks
 
 def chunk_file(path, rel):
     """Split a file into chunks at headings and blank lines.
@@ -366,7 +677,7 @@ def chunk_file(path, rel):
     if low.endswith(DOCX_EXTS):
         return _merge_and_id(_chunk_lines(docx_lines(path), rel, ""), rel)
     if low.endswith(EML_EXTS):
-        return _merge_and_id(_chunk_lines(eml_lines(path), rel, ""), rel)
+        return chunk_eml(path, rel)
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
     if "\f" in text:
@@ -798,6 +1109,8 @@ def hybrid(chunks, question, top_k, stats_chunks, emb_model, diverse=False):
     else:
         top = ranked[:top_k]
     hits = [(bm_score.get(i, 0.0), cos_score.get(i), by_id[i]) for i in top]
+    best = max(cos_score, key=cos_score.get) if cos_score else None
+    hybrid.dense_best = (cos_score[best], by_id[best]) if best else None   # the top cosine chunk, for a rescue slot
     return hits, bm_top, cos_top
 
 GENERIC_FOLDER_WORDS = {"firm", "ip", "law", "llp", "llc", "pc", "group", "partners", "the", "and", "of", "co"}
@@ -816,20 +1129,239 @@ def folders_named(question, chunks):
             named.append(f)
     return named if len(named) >= 2 else []
 
-def retrieve(chunks, question, top_k, stats_chunks, emb_model, diverse=False):
-    """hybrid(), plus per-folder quotas when the question names several
-    folders: each named folder gets its own best chunks (so a firm's
-    provisional AND utility fee chunks both come along), then the remaining
+# ---------------- email threads: who a question is about, and reading a whole message ----------------
+#
+# An .eml chunk carries c["email"] = {n, of, from, to, date, self} (or {"overview": True}
+# for the thread-overview chunk). A question that NAMES a sender, or says he/she when the
+# thread has one counterparty, gets that person's chunks guaranteed (like the per-folder
+# quota). A BROAD question ("summarize his reply", "what did he say in general") is not a
+# search at all: every chunk of that person's messages is read, in order, up to a budget.
+
+PER_SENDER_MIN = 3        # chunks each targeted sender is guaranteed on a normal question
+GATHER_MAX_CHUNKS = 40    # whole-message read budget (about 10k tokens); above it the gap is reported
+GATHER_MAX_TOKENS = 1800  # answer budget for a whole-message read (the plain-ask default is 1200)
+PRONOUNS = re.compile(r"(?i)\b(he|him|his|she|hers?|they|them|their)\b")
+BROAD_RE = re.compile(r"(?i)\b(summar\w*|overview|in general|main points|key points|recap|gist|overall|"
+                      r"walk me through|go over|everything|all of it|(?:whole|entire|full) (?:reply|email|"
+                      r"message|thread|response|chain)|what did \w+ (?:say|write)\s*[.?!]?$|"
+                      r"what (?:did|does) \w+ (?:say|write) (?:in|about) (?:the|his|her|their) (?:reply|email|"
+                      r"message|response)\s*[.?!]?$|where things stand|where we stand|what did \w+ (?:say|write) overall)")
+GENERIC_NAME_WORDS = {"the", "and", "mr", "mrs", "ms", "dr", "team", "office", "mail", "email",
+                      "example", "com", "net", "org", "reply", "message", "sir", "madam",
+                      "firm", "llp", "llc", "inc", "ltd", "corp", "group", "law"}
+
+def email_meta(c):
+    return c.get("email") or {}
+
+def my_names():
+    """Names or addresses that mean the user, from run-config.json "me" (a string or a
+    list, git-ignored, per machine). Lets "he/she" resolve to the counterparty of a
+    thread the user did not forward to themselves."""
+    try:
+        with open(os.path.join(BASE, "run-config.json"), encoding="utf-8") as f:
+            me = json.load(f).get("me") or []
+    except (OSError, ValueError):
+        return []
+    return [me] if isinstance(me, str) else [str(x) for x in me]
+
+def is_me(sender, names=None):
+    names = my_names() if names is None else names
+    toks = set(_name_words(sender))
+    return any(toks & set(_name_words(n)) or (n.lower() in sender.lower()) for n in names if n)
+
+def email_senders(chunks):
+    """{display name: [chunks]} for every message sender in the indexed .eml files."""
+    out = {}
+    for c in chunks:
+        m = email_meta(c)
+        if m.get("from") and not m.get("overview"):
+            out.setdefault(m["from"], []).append(c)
+    return out
+
+def _name_words(s):
+    """Distinctive words of a display name: ASCII words of 3+ letters, other scripts 2+."""
+    return [t for t in re.findall(r"\w+", (s or "").lower())
+            if t not in GENERIC_NAME_WORDS and (len(t) >= 3 if t.isascii() else len(t) >= 2)]
+
+def email_targets(question, chunks):
+    """Who an email question is about. Senders the question NAMES (a distinctive word of
+    the display name) win; else, when the question says he/she/they and the thread has
+    exactly one counterparty (every sender except whoever forwarded the thread to
+    themselves), that counterparty. Returns {"senders": [...], "via": "named"|"pronoun"}
+    or None. Deterministic; the audit line records it."""
+    senders = email_senders(chunks)
+    if not senders:
+        return None
+    words = set(re.findall(r"\w+", question.lower()))
+    named = []
+    for s in senders:
+        toks = _name_words(s)
+        if toks and any(t in words or (not t.isascii() and any(w != t and t.startswith(w) and len(w) >= 2 for w in words))
+                        for t in toks):
+            named.append(s)
+    counterparty = None
+    if PRONOUNS.search(question):
+        selfs = {email_meta(c)["from"] for c in chunks if email_meta(c).get("self") and email_meta(c).get("from")}
+        mine = my_names()
+        selfs |= {s for s in senders if is_me(s, mine)}
+        others = [s for s in senders if s not in selfs]
+        if len(others) == 1 and selfs:
+            counterparty = others[0]
+    dates = dates_named(question, chunks)
+    ordinal = ordinals_named(question)
+    if named:
+        # "which of Maya's questions did he answer": the named person AND the pronoun's person
+        if counterparty and counterparty not in named:
+            named.append(counterparty)
+        return {"senders": sorted(named), "via": "named", "dates": dates, "ordinal": ordinal}
+    if counterparty:
+        return {"senders": [counterparty], "via": "pronoun", "dates": dates, "ordinal": ordinal}
+    if dates:
+        # "the May 7 email": the message(s) of that day, whoever wrote them
+        return {"senders": sorted({email_meta(c)["from"] for c in chunks if email_meta(c).get("date") in dates
+                                   and email_meta(c).get("from")}), "via": "date", "dates": dates, "ordinal": []}
+    return None
+
+def dates_named(question, chunks):
+    """Message dates the question names ('May 7', 'May 7th', '5/7', '2026-05-07',
+    '7 May'), as ISO strings; only dates that some thread message carries."""
+    q = " " + re.sub(r"\s+", " ", question.lower()) + " "
+    found = []
+    for c in chunks:
+        d = email_meta(c).get("date")
+        if not d or d in found:
+            continue
+        try:
+            dt = datetime.date.fromisoformat(d)
+        except ValueError:
+            continue
+        mon, day = dt.strftime("%B").lower(), dt.day
+        forms = [d, f"{mon} {day}", f"{mon[:3]} {day}", f"{mon} {day}th", f"{mon} {day}st", f"{mon} {day}nd",
+                 f"{mon} {day}rd", f"{day} {mon}", f"{day} {mon[:3]}", f"{dt.month}/{day}", f"{dt.month}/{day}/{dt.year}",
+                 f"{dt.month}월 {day}일"]
+        if any(re.search(r"(?<![\w/])" + re.escape(f) + r"(?![\w/])", q) for f in forms):
+            found.append(d)
+    return found
+
+ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4,
+            "last": -1, "latest": -1, "final": -1, "most recent": -1, "newest": -1, "earliest": 1, "original": 1}
+ORDINAL_RE = re.compile(r"(?i)\b(" + "|".join(re.escape(k) for k in sorted(ORDINALS, key=len, reverse=True))
+                        + r")\s+(?:reply|replies|email|e-mail|message|note|mail|response|answer)\b")
+
+def ordinals_named(question):
+    """[1] for 'his first reply', [-1] for 'the latest email', [] when none or several
+    ('between his first and second reply' compares, it does not narrow)."""
+    found = []
+    for m in ORDINAL_RE.finditer(question):
+        n = ORDINALS[m.group(1).lower()]
+        if n not in found:
+            found.append(n)
+    return found if len(found) == 1 else []
+
+def is_broad(question):
+    return bool(BROAD_RE.search(question))
+
+def overview_chunks(chunks):
+    return [c for c in chunks if email_meta(c).get("overview")]
+
+def thread_chunks(chunks):
+    return [c for c in chunks if email_meta(c).get("from") and not email_meta(c).get("overview")]
+
+def target_chunks(chunks, target):
+    """The chunks of the messages a target points at: the senders' messages, narrowed
+    to the named dates when any, else to the named ordinal ('second reply' = that
+    sender's second message). Document order."""
+    body = [c for c in thread_chunks(chunks) if email_meta(c)["from"] in (target or {}).get("senders", [])]
+    dates = (target or {}).get("dates") or []
+    if dates:
+        dated = [c for c in body if email_meta(c).get("date") in dates]
+        if dated:
+            return dated
+    ords = (target or {}).get("ordinal") or []
+    if ords:
+        keys = []
+        for c in body:                      # this sender's messages in order (n is thread-wide)
+            k = (email_meta(c).get("from"), email_meta(c).get("n"))
+            if k not in keys:
+                keys.append(k)
+        per = {}
+        for f, n in keys:
+            per.setdefault(f, []).append(n)
+        want = set()
+        for f, ns in per.items():
+            i = ords[0]
+            if -len(ns) <= i - (1 if i > 0 else 0) < len(ns):
+                want.add((f, ns[i - 1] if i > 0 else ns[i]))
+        picked = [c for c in body if (email_meta(c).get("from"), email_meta(c).get("n")) in want]
+        if picked:
+            return picked
+    return body
+
+def gather_hits(chunks, body, budget=GATHER_MAX_CHUNKS):
+    """A read, not a search: the thread overview, then `body` (the chunks of the
+    messages to read) in document order. Returns (chunks, dropped): above the budget
+    a diverse per-message subset is taken and the count left out is returned so the
+    caller can say so."""
+    ov = overview_chunks(chunks)
+    body = [c for c in body if not email_meta(c).get("overview")]
+    room = max(0, budget - len(ov))
+    dropped = max(0, len(body) - room)
+    if dropped:
+        keep = {c["id"] for c in diverse_select(body, room)}
+        body = [c for c in body if c["id"] in keep]
+    return ov + body, dropped
+
+READ_MAX_CHUNKS = 24      # a targeted person's messages this small are READ whole for any question about them
+
+def plan_read(question, chunks, target):
+    """Decide whether a question is answered by reading messages whole instead of
+    searching. Returns (chunks_to_read, dropped, note) or (None, 0, None).
+    - a target (named / he-she / date / ordinal) whose messages fit READ_MAX_CHUNKS: read them
+    - a broad question about a bigger target, or about the whole thread: read up to the budget
+    Deterministic; the audit line records 'gathered'."""
+    if not email_senders(chunks):
+        return None, 0, None
+    broad = is_broad(question)
+    if target:
+        body = target_chunks(chunks, target)
+        if body and (len(body) <= READ_MAX_CHUNKS or broad):
+            got, dropped = gather_hits(chunks, body)
+            who = " and ".join(target["senders"])
+            if target.get("dates"):
+                who += " on " + ", ".join(target["dates"])
+            elif target.get("ordinal"):
+                who += " (message %s)" % ("last" if target["ordinal"][0] < 0 else str(target["ordinal"][0]))
+            n_msgs = len({(email_meta(c).get("from"), email_meta(c).get("n")) for c in body})
+            return got, dropped, f"read {len(got)} chunks: {n_msgs} message(s) from {who}"
+        return None, 0, None
+    if broad:
+        body = thread_chunks(chunks)
+        got, dropped = gather_hits(chunks, body)
+        n_msgs = len({(email_meta(c).get("from"), email_meta(c).get("n")) for c in body})
+        return got, dropped, f"read {len(got)} chunks: the whole thread, {n_msgs} message(s)"
+    return None, 0, None
+
+def retrieve(chunks, question, top_k, stats_chunks, emb_model, diverse=False, target=None, rescue_min=0.5):
+    """hybrid(), plus quotas: when the question names several folders, each named
+    folder gets its own best chunks (so a firm's provisional AND utility fee chunks
+    both come along); when it is about one or more email senders (`target` from
+    email_targets), each sender's messages get their own best chunks. The remaining
     slots fill from the global ranking. Returns (hits, bm_top, cos_top, named)."""
     named = folders_named(question, chunks)
-    if not named:
+    groups = [(f, [c for c in chunks if c["file"].startswith(f + "/")]) for f in named]
+    if target and target.get("senders"):
+        tc = target_chunks(chunks, target)
+        for s in target["senders"]:
+            groups.append((s, [c for c in tc if email_meta(c).get("from") == s]))
+    if not groups:
         hits, bm_top, cos_top = hybrid(chunks, question, top_k, stats_chunks, emb_model, diverse=diverse)
-        return hits, bm_top, cos_top, []
-    quota = max(PER_FOLDER_MIN, top_k // len(named))
+        return dense_rescue(hits, rescue_min), bm_top, cos_top, []
+    quota = max(PER_FOLDER_MIN, top_k // len(groups))
     stats = stats_chunks or chunks
     picked, seen = [], set()
-    for f in named:
-        sub = [c for c in chunks if c["file"].startswith(f + "/")]
+    for _label, sub in groups:
+        if not sub:
+            continue
         h, _, _ = hybrid(sub, question, quota, stats, emb_model, diverse=False)
         for s_, cs, c in h:
             if (s_ > 0 or (cs or 0) > 0) and c["id"] not in seen:
@@ -842,7 +1374,16 @@ def retrieve(chunks, question, top_k, stats_chunks, emb_model, diverse=False):
         if c["id"] not in seen:
             seen.add(c["id"]); picked.append((s_, cs, c))
     picked.sort(key=lambda t: -(t[0] + 10 * (t[1] or 0)))   # score order for the [S#] labels
-    return picked, bm_top, cos_top, named
+    return dense_rescue(picked, rescue_min), bm_top, cos_top, named
+
+def dense_rescue(hits, rescue_min):
+    """The top-cosine chunk of the last hybrid() call rides along when the fused
+    ranking left it out and its cosine clears the dense gate: a paraphrase the words
+    missed ('meet' for 'meeting') costs one extra source, not the answer."""
+    best = getattr(hybrid, "dense_best", None)
+    if not best or best[0] < rescue_min or any(c["id"] == best[1]["id"] for _, _, c in hits):
+        return hits
+    return hits + [(0.0, best[0], best[1])]
 
 # ---------------- LM Studio ----------------
 
@@ -983,9 +1524,12 @@ def verify_numbers(answer, source_text):
 # (or owns a cited non-email document), and warns when Name appears ONLY as a
 # recipient of cited mail. That is the attribution-drift case: answering "Firm X
 # said/committed ..." from OUR outgoing mail to Firm X, where X never spoke.
-ATTR_VERBS = (r"said|stated|wrote|told|quoted|offered|proposed|committed|agreed|"
+ATTR_VERBS = (r"said|says|stated|wrote|writes|told|quoted|offered|proposed|committed|agreed|"
               r"confirmed|declined|deferred|requested|charged|promised|indicated|"
-              r"noted|mentioned|responded|replied|asked|gave|set")
+              r"noted|mentioned|responded|replied|asked|asks|gave|set|"
+              r"approved|rejected|decided|answered|explained|suggested|recommended|wanted|wants|"
+              r"accepted|denied|required|requires|insisted|clarified|lowered|raised|added|described|"
+              r"listed|expects|expected|prefers|preferred|thinks|believes|estimated")
 STOPNAMES = {"the", "this", "that", "it", "they", "he", "she", "firm", "both",
              "other", "none", "no", "and", "for", "our", "your", "their", "these",
              "those", "a", "an", "we", "i", "you", "there", "here", "email"}
@@ -1186,12 +1730,27 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     chat_model, emb_model = server_models()
     if not index.get("embed_model"):
         emb_model = None  # index has no vectors; stay BM25-only
-    hits, bm_top, cos_top, named = retrieve(chunks, question, top_k,
-                                            index["chunks"] if only else None, emb_model,
-                                            diverse=diverse)
-    hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
+    stats = index["chunks"] if only else None
+    target = email_targets(question, chunks)
+    # a question about a person whose messages are small enough, or a broad question about
+    # a thread, is a READ of those messages, not a search (see plan_read)
+    gathered, dropped, gather_note = plan_read(question, chunks, target)
+    if gathered:
+        bm_all = {c["id"]: s for s, c in bm25(chunks, question, len(chunks), stats_chunks=stats)}
+        hits = [(bm_all.get(c["id"], 0.0), None, c) for c in gathered]
+        bm_top, cos_top, named = max((h[0] for h in hits), default=0.0), None, []
+    else:
+        hits, bm_top, cos_top, named = retrieve(chunks, question, top_k, stats, emb_model,
+                                                diverse=diverse, target=target, rescue_min=dense_min)
+        hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
+        if any(email_meta(c).get("from") for _, _, c in hits):
+            # the thread overview (dates, senders, order) rides along with any email hit
+            have = {c["id"] for _, _, c in hits}
+            hits += [(0.0, None, c) for c in overview_chunks(chunks) if c["id"] not in have]
     audit = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter,
              "question": question, "only": only, "batch": batch, "per_folder": named or None,
+             "email_target": target, "gathered": len(gathered) if gathered else None,
+             "gather_dropped": dropped or None,
              "top_score": round(bm_top, 3),
              "cos_top": round(cos_top, 3) if cos_top is not None else None,
              "dense": emb_model is not None,
@@ -1199,6 +1758,8 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
                          "cos": round(cs, 3) if cs is not None else None}
                         for s, cs, c in hits]}
     dense_ok = cos_top is not None and cos_top >= dense_min
+    if gathered:
+        dense_ok = True   # the target was chosen deterministically; nothing to gate
     if not hits or (bm_top < min_score and not dense_ok):
         audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None,
                       "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
@@ -1225,19 +1786,28 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
         print(answer_rule("answer", estimate_tokens(system, user)))
         rend = AnswerRenderer()
         on_token = rend.feed
-    answer, usage, _ = generate(system, user, model, on_token)
+    gen = {**GEN, "max_tokens": GATHER_MAX_TOKENS} if gathered else None   # a whole-message read may need a longer answer
+    answer, usage, meta = generate(system, user, model, on_token, gen=gen)
     if not quiet:
         rend.close()
         print()  # end the streamed line
-    warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
+    warnings = []
+    if (meta or {}).get("finish") == "length":
+        warnings.append(f"TRUNCATED: the answer hit the {(gen or GEN)['max_tokens']:,}-token limit and may be cut; "
+                        f"ask a narrower question, or use /summarize <file> for a whole-file summary")
+    warnings += verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
+    if dropped:
+        warnings.append(f"COVERAGE: read {len(gathered)} of {len(gathered) + dropped} chunks of the "
+                        f"targeted message(s) (budget {GATHER_MAX_CHUNKS}); {dropped} not shown")
     audit.update({"refused": False, "answer": answer, "warnings": warnings,
                   "model": model, "latency_s": round(time.time() - t0, 1),
                   "usage": usage,
                   "config": run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse)})
     _log(matter, audit)
     if not quiet:
-        print("\n" + sources_block(hits, named=named))
+        print("\n" + sources_block(hits, named=named, note=gather_note or
+                                   (f"about {' and '.join(target['senders'])}" if target else None)))
         for w in warnings:
             print(warn_line(w))
         print(context_line(usage) + "\n")
@@ -1288,10 +1858,14 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
         emb_model = None
     # a follow-up ("and Bravo?") retrieves on both questions so the topic carries over
     query = question + " " + previous["question"] if previous and previous.get("question") else question
+    target = email_targets(question, chunks)
     hits, bm_top, cos_top, named = retrieve(chunks, query, top_k,
                                             index["chunks"] if only else None, emb_model,
-                                            diverse=diverse)
+                                            diverse=diverse, target=target, rescue_min=dense_min)
     hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
+    if any(email_meta(c).get("from") for _, _, c in hits):
+        have = {c["id"] for _, _, c in hits}
+        hits += [(0.0, None, c) for c in overview_chunks(chunks) if c["id"] not in have]
     audit = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter, "mode": "reason",
              "question": question, "only": only, "batch": batch, "per_folder": named or None,
              "previous": ({"question": previous.get("question"), "answer_chars": len(previous.get("answer") or "")}
@@ -1634,6 +2208,7 @@ CHAT_COMMANDS = [
     ("matters",  "",               "list the matters",                                       None),
     ("reingest", "",               "convert new files, rebuild the index, show coverage",    None),
     ("reason",   "<question>",     "think, compute and compare over the sources; conclusions are labeled [INFERENCE]", None),
+    ("summarize", "[folder|file]",  "cited bullets over ALL chunks of the scope (a read, not a search); no value = current scope", "folders"),
     ("think",    "[on|off]",       "show the /reason thinking trace in gray as it streams; no value toggles", None),
     ("clear",    "",               "forget the previous turn (the next /reason starts fresh)",  None),
     ("note",     "[drop]",         "save the last answer under docs/model-notes/ (derived, not a source for plain questions); drop = delete it", None),
@@ -1833,10 +2408,10 @@ def render_answer(text, width=None):
     r.feed(text); r.close()
     return "".join(r.text)
 
-def sources_block(hits, scored=True, named=None):
+def sources_block(hits, scored=True, named=None, note=None):
     """A dim, indented list under the answer: label, file, heading. Scores stay
     in the audit line; a derived note is marked in yellow."""
-    note = f" \u00b7 per folder: {', '.join(named)}" if named else ""
+    note = (f" \u00b7 per folder: {', '.join(named)}" if named else "") + (f" \u00b7 {note}" if note else "")
     out = [f"{DIM}sources{note}:{RESET}"]
     for i, h in enumerate(hits, 1):
         s, cs, c = h if scored else (None, None, h)
@@ -1985,6 +2560,19 @@ def chat_command(state, line, erase=None):
         return True, chat_help_text()
     if cmd == "show":
         return True, state.show()
+    if cmd == "summarize":
+        scope = arg or state.scope
+        if scope and not state.has_scope(scope):
+            return True, f"nothing indexed under '{scope}' (try /folders)"
+        if erase:
+            erase()
+        try:
+            summarize(state.matter, only=scope, dense_min=state.dense_min)
+        except SystemExit as e:
+            return True, f"!!  {e.code}" if e.code else ""
+        except (urllib.error.URLError, OSError) as e:
+            return True, f"!!  ERROR: {e}"
+        return True, ""
     if cmd == "reason":
         if not arg:
             return True, "usage: /reason <question>   (thinks first; slower, lower trust than a plain question)"
@@ -2895,6 +3483,130 @@ def selftest(min_score):
     check("attribution: an .eml sender passes the speaker check",
           bool(em) and verify_attribution("Firm Lima stated a retainer is required.",
                                           [("thread.eml", em[0]["heading"])]) == [])
+
+    # .eml chain: a self-forwarded thread splits into its messages, oldest first, own headings
+    ch = [c for c in index["chunks"] if c["file"] == "chain.eml"]
+    heads = []
+    for c in ch:
+        if c["heading"] not in heads:
+            heads.append(c["heading"])
+    check("eml chain: five messages plus a thread overview, oldest first, each under its own heading",
+          len(heads) == 6 and heads[0].startswith("thread overview") and heads[1].startswith("2026-05-04 Maya Reyes")
+          and heads[2].startswith("2026-05-07 Daniel Okonkwo") and heads[5].startswith("2026-05-12 Maya Reyes"))
+    ts = [c for c in ch if "two full seasons" in c["text"]]
+    check("eml chain: a paragraph of the long reply sits under the replier's heading with message meta",
+          bool(ts) and ts[0]["heading"].startswith("2026-05-07 Daniel Okonkwo")
+          and email_meta(ts[0]).get("n") == 2 and email_meta(ts[0]).get("of") == 5
+          and email_meta(ts[0]).get("from") == "Daniel Okonkwo" and email_meta(ts[0]).get("date") == "2026-05-07")
+    ov = overview_chunks(ch)
+    check("eml chain: the overview lists every message with its date, weekday and verb",
+          len(ov) == 1 and "Message 2 of 5: Daniel Okonkwo replied to Maya Reyes on 2026-05-07 (Thursday, May 7, 2026)"
+          in ov[0]["text"] and "Message 5 of 5: Maya Reyes forwarded the thread to themselves on 2026-05-12" in ov[0]["text"])
+    n_daniel = sum(1 for c in ch if email_meta(c).get("from") == "Daniel Okonkwo")
+    check("eml chain: the self-forward is marked self, the counterparty is not",
+          any(email_meta(c).get("self") and email_meta(c).get("from") == "Maya Reyes" for c in ch)
+          and not any(email_meta(c).get("self") and email_meta(c).get("from") == "Daniel Okonkwo" for c in ch))
+    check("eml chain: attribution passes for the replier and warns for the recipient of his mail",
+          bool(ts) and verify_attribution("Daniel Okonkwo rejected the greenhouse.", [(ts[0]["file"], ts[0]["heading"])]) == []
+          and verify_attribution("Maya Reyes rejected the greenhouse.", [(ts[0]["file"], ts[0]["heading"])]) != [])
+    gm = split_thread(["Thanks!", "", "On Thu, May 7, 2026 at 9:12 AM Daniel Okonkwo <d.okonkwo@riversidegarden.example>",
+                       "wrote:", "> Maya,", "> ", "> No to the greenhouse.", "> ",
+                       "> On Mon, May 4, 2026 at 10:30 AM Maya Reyes <m.reyes@riversidegarden.example> wrote:",
+                       "> > Please approve the greenhouse."])
+    check("eml chain: Gmail 'On ... wrote:' (wrapped over two lines, nested quotes) splits with date and sender",
+          len(gm) == 3 and gm[1]["date"] == "2026-05-07"
+          and gm[1]["from"] == "Daniel Okonkwo <d.okonkwo@riversidegarden.example>"
+          and "No to the greenhouse." in gm[1]["lines"] and gm[2]["date"] == "2026-05-04"
+          and gm[2]["from"].startswith("Maya Reyes") and "Please approve the greenhouse." in gm[2]["lines"])
+    ap = split_thread(["Sure.", "", "> On May 7, 2026, at 9:12 AM, Daniel Okonkwo <d.okonkwo@riversidegarden.example> wrote:",
+                       "> ", "> No to the greenhouse."])
+    check("eml chain: Apple Mail 'On <date>, at <time>, <name> wrote:' splits",
+          len(ap) == 2 and ap[1]["date"] == "2026-05-07" and ap[1]["from"].startswith("Daniel Okonkwo"))
+    ko = split_thread(["확인했습니다.", "", "________________________________",
+                       "보낸 사람: Daniel Okonkwo <d.okonkwo@riversidegarden.example>",
+                       "보낸 날짜: 2026년 5월 7일 목요일 오전 9:12",
+                       "받는 사람: Maya Reyes <m.reyes@riversidegarden.example>", "제목: RE: 확장 계획", "",
+                       "온실은 올해 안 됩니다."])
+    check("eml chain: Korean Outlook header block splits with its date and subject",
+          len(ko) == 2 and ko[1]["date"] == "2026-05-07" and ko[1]["subject"] == "RE: 확장 계획"
+          and ko[1]["to"].startswith("Maya Reyes") and "온실은 올해 안 됩니다." in ko[1]["lines"])
+    ol = split_thread(["FYI", "", "-----Original Message-----", "From: Daniel Okonkwo <d.okonkwo@riversidegarden.example>",
+                       "Sent: Thursday, May 7, 2026 9:12 AM", "To: Maya Reyes <m.reyes@riversidegarden.example>",
+                       "Cc: Priya Nair <p.nair@riversidegarden.example>", "Subject: RE: Expansion plan", "",
+                       "No to the greenhouse."])
+    check("eml chain: Outlook 'Original Message' block splits and keeps the cc",
+          len(ol) == 2 and ol[1]["cc"].startswith("Priya Nair") and ol[1]["date"] == "2026-05-07"
+          and ol[1]["subject"] == "RE: Expansion plan")
+    dates = [parse_loose_date(s) for s in ("Thursday, May 7, 2026 9:12 AM", "Thu, May 7, 2026 at 9:12 AM",
+                                           "7 May 2026 09:12", "2026-05-07 09:12", "2026년 5월 7일 (목) 오전 9:12",
+                                           "Thu, 07 May 2026 09:12:00 -0700", "5/7/2026 9:12 AM")]
+    dates.append(parse_loose_date("5/7/26 9:12 AM"))
+    check("eml chain: eight date spellings all parse to 2026-05-07", all(d == "2026-05-07" for d in dates))
+    check("eml me: a run-config 'me' name or address marks a sender as the user",
+          is_me("Maya Reyes <m.reyes@riversidegarden.example>", ["Maya Reyes"])
+          and is_me("Maya Reyes <m.reyes@riversidegarden.example>", ["m.reyes@riversidegarden.example"])
+          and not is_me("Daniel Okonkwo <d.okonkwo@riversidegarden.example>", ["Maya Reyes"])
+          and not is_me("Daniel Okonkwo <d.okonkwo@riversidegarden.example>", []))
+    inner = ("From: Daniel Okonkwo <d.okonkwo@riversidegarden.example>\r\nTo: Maya Reyes <m.reyes@riversidegarden.example>\r\n"
+             "Date: Thu, 07 May 2026 09:12:00 -0700\r\nSubject: RE: Expansion plan\r\nContent-Type: text/plain; charset=utf-8\r\n"
+             "\r\nNo to the greenhouse.\r\n")
+    outer = email.message_from_bytes(
+        ("From: Maya Reyes <m.reyes@riversidegarden.example>\r\nTo: Maya Reyes <m.reyes@riversidegarden.example>\r\n"
+         "Date: Tue, 12 May 2026 08:05:00 -0700\r\nSubject: FW: Expansion plan\r\nMIME-Version: 1.0\r\n"
+         "Content-Type: multipart/mixed; boundary=\"b1\"\r\n\r\n--b1\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+         "Saving this.\r\n--b1\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment; filename=\"fw.eml\"\r\n\r\n"
+         + inner + "--b1--\r\n").encode(), policy=email.policy.default)
+    fa = messages_of(outer)
+    check("eml chain: a forward-as-attachment yields the attached message with its own sender and date",
+          len(fa) == 2 and fa[1]["from"].startswith("Daniel Okonkwo") and fa[1]["date"] == "2026-05-07"
+          and "No to the greenhouse." in fa[1]["lines"] and fa[0]["from"].startswith("Maya Reyes"))
+    t1 = email_targets("What did Daniel reject?", ch)
+    t2 = email_targets("what did he say about the helpers", ch)
+    t3 = email_targets("what is the permit fee", ch)
+    t4 = email_targets("what did Maya ask in the follow-up", ch)
+    t5 = email_targets("which of Maya's three questions did he not answer?", ch)
+    check("eml targets: a named sender; he/she = the one counterparty of a self-forward; none otherwise",
+          t1 == {"senders": ["Daniel Okonkwo"], "via": "named", "dates": [], "ordinal": []}
+          and t2 == {"senders": ["Daniel Okonkwo"], "via": "pronoun", "dates": [], "ordinal": []}
+          and t3 is None and t4 == {"senders": ["Maya Reyes"], "via": "named", "dates": [], "ordinal": []})
+    check("eml targets: a named person plus a pronoun targets both of them",
+          t5 == {"senders": ["Daniel Okonkwo", "Maya Reyes"], "via": "named", "dates": [], "ordinal": []})
+    t6 = email_targets("what are the main points of his May 7 email?", ch)
+    t7 = email_targets("what was decided on 5/11?", ch)
+    g3 = target_chunks(ch, t6)
+    check("eml targets: a date in the question narrows the read to that day's message",
+          t6["dates"] == ["2026-05-07"] and t7 == {"senders": ["Daniel Okonkwo"], "via": "date", "dates": ["2026-05-11"], "ordinal": []}
+          and g3 and all(email_meta(c).get("date") == "2026-05-07" for c in g3))
+    t8 = email_targets("what did he answer in his second reply?", ch)
+    t9 = email_targets("what did she say in her latest email?", ch)
+    t10 = email_targets("what changed between his first reply and his second reply?", ch)
+    check("eml targets: an ordinal picks that sender's n-th message; two ordinals compare and do not narrow",
+          t8["ordinal"] == [2] and all(email_meta(c).get("n") == 4 for c in target_chunks(ch, t8))
+          and t9["ordinal"] == [-1] and all(email_meta(c).get("n") == 4 for c in target_chunks(ch, t9))
+          and t10["ordinal"] == [] and {email_meta(c).get("n") for c in target_chunks(ch, t10)} == {2, 4})
+    rd, _, note = plan_read("what did he reject?", ch, email_targets("what did he reject?", ch))
+    check("eml read: a question about a person whose messages fit the read budget reads them whole",
+          rd and email_meta(rd[0]).get("overview") and all(email_meta(c).get("from") == "Daniel Okonkwo" for c in rd[1:])
+          and len(rd) - 1 == n_daniel and note.startswith("read "))
+    check("eml read: a fact question with no person and no broad wording stays a search",
+          plan_read("what is the permit fee", ch, None) == (None, 0, None))
+    check("eml overview: a self-forward is marked as a filing copy, and the conversation's real last message is named",
+          "forwarded the thread to themselves" in ov[0]["text"] and "ends with message 4" in ov[0]["text"])
+    check("eml broad: summary phrasing is broad, a fact question is not",
+          is_broad("summarize his reply") and is_broad("what did he say in general about the plan")
+          and is_broad("What did Daniel say?") and is_broad("give me an overview of where things stand")
+          and not is_broad("what is the permit fee") and not is_broad("what did he say about the greenhouse"))
+    g, dropped = gather_hits(ch, target_chunks(ch, {"senders": ["Daniel Okonkwo"]}))
+    check("eml gather: the overview first, then every chunk of that sender's messages in order, nothing else",
+          bool(g) and email_meta(g[0]).get("overview") and all(email_meta(c).get("from") == "Daniel Okonkwo" for c in g[1:])
+          and [email_meta(c)["n"] for c in g[1:]] == sorted(email_meta(c)["n"] for c in g[1:])
+          and dropped == 0 and len(g) - 1 == n_daniel)
+    g2, d2 = gather_hits(ch, thread_chunks(ch), budget=3)
+    check("eml gather: over budget keeps the overview, takes a subset, and reports the dropped count",
+          len(g2) == 3 and email_meta(g2[0]).get("overview") and d2 == len(thread_chunks(ch)) - 2)
+    th, _, _, _ = retrieve(index["chunks"], "What did Daniel say about the greenhouse?", 5, None, None, target=t1)
+    check("eml retrieve: a targeted sender is guaranteed chunks in a mixed corpus",
+          sum(1 for _, _, c in th if email_meta(c).get("from") == "Daniel Okonkwo") >= min(PER_SENDER_MIN, n_daniel))
 
     # coverage classification of the formats we do not read natively
     with tempfile.TemporaryDirectory() as td:
