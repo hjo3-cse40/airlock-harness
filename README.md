@@ -90,9 +90,12 @@ Commands:
 Each turn is easy to find in the scrollback: the question you typed becomes a
 teal band with the mode (`ask`, `reason`, `summarize`) and the scope, a cyan
 `answer` rule shows where the answer starts and carries a context estimate
-("about 1,500 tokens in, 4% of 32k"), the sources list is dim, and warning
-lines are yellow (a check fired) or red (no usable answer). The exact token
-count follows the sources. `NO_COLOR` turns all of this into plain text.
+("about 1,500 tokens in, 4% of 32k"), the answer's light markdown is drawn
+as terminal styling (bold, dot bullets, headings, long bullets wrap with a
+hanging indent), the sources list is a dim indented list under the answer
+(label, file, heading; scores stay in the audit line), and warning lines
+are yellow (a check fired) or red (no usable answer). The exact token count
+follows the sources. `NO_COLOR` turns all of this into plain text.
 
 One line can override the session without changing it: prefix the question
 with `--only <folder> --top-k N --diverse ::`. The same prefix works in a

@@ -1220,13 +1220,14 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     user = sources_prompt(hits, question)
     t0 = time.time()
     on_token = None
+    rend = None
     if not quiet:
         print(answer_rule("answer", estimate_tokens(system, user)))
-        def on_token(t):
-            sys.stdout.write(t)
-            sys.stdout.flush()
+        rend = AnswerRenderer()
+        on_token = rend.feed
     answer, usage, _ = generate(system, user, model, on_token)
     if not quiet:
+        rend.close()
         print()  # end the streamed line
     warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
@@ -1353,14 +1354,15 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
                 sys.stdout.write(f"  (thought for {n:,} tokens)\n")
             count[0] = 0
             sys.stdout.write(answer_rule("answer", est) + "\n")
+        rend = AnswerRenderer()
         def on_token(t):
             if count[0]:
                 end_thinking()
-            sys.stdout.write(t)
-            sys.stdout.flush()
+            rend.feed(t)
     answer, usage, meta = generate(system, user, chat_model, on_token,
                                    gen=gen, thinking=True, on_think=on_think)
     if not quiet:
+        rend.close()
         if not answer and count[0]:          # the trace ended without an answer (loop, cap)
             if show_thinking:
                 end_thinking()
@@ -1721,16 +1723,125 @@ def warn_line(w):
     color = FAIL_COLOR if w.startswith(FAIL_WARNINGS) else WARN_COLOR
     return f"{color}!!  {w}{RESET}"
 
+class AnswerRenderer:
+    """Streams an answer to the terminal with light markdown turned into
+    terminal styling: **bold** -> bold, a leading '*' or '-' bullet -> a dot,
+    '#' headings -> bold, `code` -> cyan. Works token by token: a lone '*' or
+    '`' at the end of a token waits for the next token. NO_COLOR = markers
+    are stripped, text stays plain."""
+    def __init__(self, out=None, width=None):
+        self.out = out or (lambda t: (sys.stdout.write(t), sys.stdout.flush()))
+        self.width = width or term_width
+        self.hold = ""            # a trailing '*' or '`' waiting for its partner
+        self.bold = self.code = False
+        self.at_line_start = True
+        self.text = []            # rendered text, for tests
+        self.col, self.indent, self.word = 0, 0, ""   # soft wrap state
+
+    def _emit(self, t):
+        """Soft-wrap at spaces with a hanging indent under a bullet. ANSI codes
+        are zero width. A partial word waits for its end."""
+        w = self.width()
+        for ch in t:
+            if ch == "\n":
+                self._flush_word()
+                self._raw("\n"); self.col = 0; self.indent = 0
+            elif ch == " ":
+                self._flush_word()
+                if self.col >= w - 1:
+                    self._raw("\n" + " " * self.indent); self.col = self.indent
+                else:
+                    self._raw(" "); self.col += 1
+            else:
+                self.word += ch
+
+    def _flush_word(self):
+        if not self.word:
+            return
+        vis = _width(re.sub(r"\x1b\[[0-9;]*m", "", self.word))
+        w = self.width()
+        if self.col > self.indent and self.col + vis > w - 1:
+            self._raw("\n" + " " * self.indent); self.col = self.indent
+        self._raw(self.word); self.col += vis; self.word = ""
+
+    def _raw(self, t):
+        self.text.append(t)
+        self.out(t)
+
+    def feed(self, tok):
+        buf = self.hold + tok
+        self.hold = ""
+        out = []
+        i = 0
+        while i < len(buf):
+            ch = buf[i]
+            if self.at_line_start:
+                # bullets and headings are decided at the start of a line; while
+                # only a possible marker has arrived, wait for the next token
+                rest = buf[i:]
+                if not rest.endswith("\n") and re.fullmatch(r" *(?:[*-]|\d{1,3}\.?|#{1,6})? *", rest):
+                    self.hold = rest; break
+                m = re.match(r"( *)(?:[*-]|\d{1,3}\.)\s+(?=\S)", rest)
+                if m and not self.code:
+                    marker = rest[len(m.group(1)):m.end()].rstrip()
+                    dot = f"{marker}" if marker.endswith(".") else "\u2022"
+                    if out:
+                        self._emit("".join(out)); out = []
+                    self._emit(m.group(1) + (MENU_CMD + dot + RESET if _COLOR else dot) + " ")
+                    self.indent = len(m.group(1)) + len(dot) + 1
+                    i += m.end(); self.at_line_start = False
+                    continue
+                m = re.match(r"#{1,6} ", rest)
+                if m:
+                    if _COLOR: out.append(BOLD)
+                    self.bold = True
+                    i += m.end(); self.at_line_start = False
+                    continue
+                self.at_line_start = False
+            if ch == "\n":
+                if self.bold and _COLOR: out.append(RESET)
+                self.bold = False
+                out.append("\n"); self.at_line_start = True
+                i += 1; continue
+            if ch == "*":
+                if i + 1 == len(buf):
+                    self.hold = "*"; break
+                if buf[i + 1] == "*":
+                    self.bold = not self.bold
+                    if _COLOR: out.append(BOLD if self.bold else RESET)
+                    i += 2; continue
+                out.append(ch); i += 1; continue
+            if ch == "`":
+                self.code = not self.code
+                if _COLOR: out.append(MENU_CMD if self.code else RESET + (BOLD if self.bold else ""))
+                i += 1; continue
+            out.append(ch); i += 1
+        if out:
+            self._emit("".join(out))
+
+    def close(self):
+        if self.hold:
+            self._emit(self.hold); self.hold = ""
+        self._flush_word()
+        if (self.bold or self.code) and _COLOR:
+            self._raw(RESET)
+        self.bold = self.code = False
+
+def render_answer(text, width=None):
+    """Whole-text helper for tests and non-streaming callers."""
+    r = AnswerRenderer(out=lambda t: None, width=(lambda: width) if width else None)
+    r.feed(text); r.close()
+    return "".join(r.text)
+
 def sources_block(hits, scored=True, named=None):
+    """A dim, indented list under the answer: label, file, heading. Scores stay
+    in the audit line; a derived note is marked in yellow."""
     note = f" \u00b7 per folder: {', '.join(named)}" if named else ""
-    out = [f"{DIM}\u2500\u2500 sources{note}{RESET}"]
+    out = [f"{DIM}sources{note}:{RESET}"]
     for i, h in enumerate(hits, 1):
         s, cs, c = h if scored else (None, None, h)
-        extra = ""
-        if scored:
-            extra = f"  {DIM}(bm25 {s:.2f}" + (f", cos {cs:.2f}" if cs is not None else "") + f"){RESET}"
-        tag = f"{WARN_COLOR}(derived note){RESET} " if is_model_note(c) else ""
-        out.append(f"{DIM}[S{i}]{RESET} {tag}{c['file']} > {c['heading'] or '(no heading)'}{extra}")
+        tag = f"{WARN_COLOR}(derived note){RESET}{DIM} " if is_model_note(c) else ""
+        out.append(f"  {DIM}S{i}  {tag}{c['file']}  {c['heading'] or '(no heading)'}{RESET}")
     return "\n".join(out)
 
 def context_line(usage, think_tokens=None):
@@ -2664,13 +2775,14 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
     if not quiet:
         print(turn_head(f"summary of {matter} from {len(selected)} of {total} chunks", "summarize", only))
         print(answer_rule("summary", estimate_tokens(SUMMARY_SYSTEM, user)))
-        def on_token(t):
-            sys.stdout.write(t); sys.stdout.flush()
+        rend = AnswerRenderer()
+        on_token = rend.feed
     t0 = time.time()
     summary, usage, _ = generate(SUMMARY_SYSTEM, user, chat_model, on_token,
                                  gen={**GEN, "max_tokens": 1800})
     summary = cap_citations(summary)
     if not quiet:
+        rend.close()
         print()
     src_text = "\n".join(c["text"] for c in selected)
     warnings = verify_numbers(summary, src_text)
@@ -3188,6 +3300,30 @@ def selftest(min_score):
           drive(list("/set top-k 8") + ["enter"])[0] == "/set top-k 8"
           and chat_menu("/set top-k 8", st) == [] and chat_menu("/set top", st) != [])
 
+    # answer renderer: markdown markers become terminal styling, streaming safe
+    md = "**Firm Alpha**\n*   **Provisional:** $4,800 [S1].\n    - nested\n1. one\n## Head\nUse `ask.py` and a * star.\n"
+    plain_md = re.sub(r"\x1b\[[0-9;]*m", "", render_answer(md, width=100))
+    check("render: bold markers, bullets, numbering, headings and code are styled, no ** survives",
+          plain_md == "Firm Alpha\n\u2022 Provisional: $4,800 [S1].\n    \u2022 nested\n1. one\nHead\nUse ask.py and a * star.\n"
+          and render_answer(md, width=100).count(BOLD) >= 3 and "**" not in render_answer(md, width=100))
+    r_split = AnswerRenderer(out=lambda t: None, width=lambda: 100)
+    for tok in ["*", "*Bo", "ld*", "* x\n", "*", "   item\n", "#", "# H\n", "12", ". n\n"]:
+        r_split.feed(tok)
+    r_split.close()
+    check("render: markers split across tokens still render",
+          re.sub(r"\x1b\[[0-9;]*m", "", "".join(r_split.text)) == "Bold x\n\u2022 item\nH\n12. n\n")
+    wrapped = re.sub(r"\x1b\[[0-9;]*m", "", render_answer("* " + "word " * 12 + "\n", width=30))
+    check("render: a long bullet soft-wraps at a space with a hanging indent",
+          wrapped.split("\n")[1].startswith("  word") and all(len(l) <= 30 for l in wrapped.split("\n")))
+    check("render: a word longer than the width is not split, plain text wraps at width",
+          "x" * 40 in render_answer("x" * 40 + " y\n", width=30)
+          and all(len(l) <= 30 for l in re.sub(r"\x1b\[[0-9;]*m", "", render_answer("a " * 40 + "\n", width=30)).split("\n")))
+    sb2 = sources_block([(1.0, None, {"file": "firm-alpha/fee.md", "heading": "Fee schedule"}),
+                         (0.5, 0.4, {"file": "model-notes/x.md", "heading": ""})], named=["firm-alpha"])
+    check("display: the sources list is dim, compact, labeled S1.., marks derived notes, no scores",
+          "sources \u00b7 per folder: firm-alpha:" in sb2 and "  S1  firm-alpha/fee.md  Fee schedule" in re.sub(r"\x1b\[[0-9;]*m", "", sb2)
+          and "(derived note)" in sb2 and "bm25" not in sb2 and "1.0" not in sb2)
+
     # turn display: band, rule, warnings, estimate
     long_q = "word " * 60
     head = turn_head(long_q.strip(), "ask", "firm-alpha")
@@ -3202,7 +3338,7 @@ def selftest(min_score):
           warn_line("TRUNCATED: x").startswith(FAIL_COLOR) and warn_line("LOOP: x").startswith(FAIL_COLOR)
           and warn_line("UNVERIFIED NUMBER: 9").startswith(WARN_COLOR))
     check("display: sources block lists every hit with its label",
-          "[S2]" in sources_block([(1.0, None, {"file": "a.md", "heading": "h"}), (0.5, 0.4, {"file": "b.md", "heading": ""})])
+          "S2" in sources_block([(1.0, None, {"file": "a.md", "heading": "h"}), (0.5, 0.4, {"file": "b.md", "heading": ""})])
           and "(no heading)" in sources_block([{"file": "b.md", "heading": ""}], scored=False))
     check("display: context line reports prompt, answer and thinking tokens",
           "1,000 prompt + 200 answer (thinking 150 of the 200) = 1,200" in context_line({"prompt_tokens": 1000, "completion_tokens": 200}, 150))
