@@ -1171,6 +1171,8 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     index = load_index(matter)
     if not quiet and head:
         print(turn_head(question, "ask", only))
+    if not (only and only.startswith(MODEL_NOTES)):
+        index = {**index, "chunks": [c for c in index["chunks"] if not is_model_note(c)]}
     sk = index.get("skipped") or []
     if sk and not quiet:
         print(f"[coverage] {len(sk)} file(s) in this matter are NOT indexed and cannot be "
@@ -1193,7 +1195,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
              "top_score": round(bm_top, 3),
              "cos_top": round(cos_top, 3) if cos_top is not None else None,
              "dense": emb_model is not None,
-             "chunks": [{"id": c["id"], "heading": c["heading"], "score": round(s, 3),
+             "chunks": [{"id": c["id"], "file": c["file"], "heading": c["heading"], "score": round(s, 3),
                          "cos": round(cs, 3) if cs is not None else None}
                         for s, cs, c in hits]}
     dense_ok = cos_top is not None and cos_top >= dense_min
@@ -1296,7 +1298,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
              "top_score": round(bm_top, 3),
              "cos_top": round(cos_top, 3) if cos_top is not None else None,
              "dense": emb_model is not None,
-             "chunks": [{"id": c["id"], "heading": c["heading"], "score": round(s, 3),
+             "chunks": [{"id": c["id"], "file": c["file"], "heading": c["heading"], "score": round(s, 3),
                          "cos": round(cs, 3) if cs is not None else None}
                         for s, cs, c in hits]}
     gen = {**REASON_GEN, "max_tokens": think_budget or REASON_GEN["max_tokens"]}
@@ -1497,6 +1499,121 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
     print(f"tokens: {pt:,} prompt + {ct:,} answer | elapsed {mins:.1f} min")
     print(f"audit: {os.path.relpath(audit_path(matter), BASE)} (lines tagged batch={tag})")
 
+# ---------------- notes ----------------
+#
+# Two folders under docs/. `notes/` holds what the user writes: trusted sources
+# like any document. `model-notes/` holds answers saved with /note: DERIVED text,
+# never a source for a plain question, visible to reason mode with a label.
+
+NOTES = "notes"
+MODEL_NOTES = "model-notes"
+
+def is_model_note(chunk):
+    return chunk["file"].startswith(MODEL_NOTES + "/")
+
+def note_slug(question, words=6):
+    toks = re.findall(r"[a-z0-9]+", (question or "").lower())[:words]
+    return "-".join(toks) or "note"
+
+_CITE_GROUP = re.compile(r"\[(S\d+(?:\s*[,;]\s*S?\d+)*)\]")
+
+def resolve_citations(text, chunks):
+    """[S3] -> [S3: file > heading] so a note reads on its own. Groups like
+    [S1, S2] are expanded; an unknown label is left as written."""
+    by_n = {i: c for i, c in enumerate(chunks, 1)}
+    def one(n):
+        c = by_n.get(n)
+        return f"S{n}: {c['file']} > {c.get('heading') or '(no heading)'}" if c else f"S{n}"
+    def grp(m):
+        nums = [int(x) for x in re.findall(r"\d+", m.group(1))]
+        return "[" + "; ".join(one(n) for n in nums) + "]"
+    return _CITE_GROUP.sub(grp, text)
+
+def render_note(turn, now=None):
+    """The note text: a header that says it is derived, then the question and
+    the answer with citations resolved. `turn` is a remembered turn."""
+    now = now or time.strftime("%Y-%m-%d %H:%M")
+    chunks = turn.get("chunks") or []
+    q = " ".join((turn.get("question") or "").split())
+    warnings = turn.get("warnings") or []
+    lines = [f"# Note: {q[:120]}", "",
+             "<!-- DERIVED NOTE: written by a language model from the sources listed below. "
+             "Not a source document. Check every number against the cited source. -->", "",
+             f"- kind: model-note",
+             f"- written: {now}",
+             f"- model: {turn.get('model') or 'unknown'}",
+             f"- mode: {turn.get('mode') or 'ask'}",
+             f"- scope: {turn.get('only') or 'whole matter'}",
+             f"- warnings: {'; '.join(warnings) if warnings else 'none'}",
+             "- sources:"]
+    for i, c in enumerate(chunks, 1):
+        lines.append(f"  - S{i}: {c['file']} > {c.get('heading') or '(no heading)'}")
+    lines += ["", "## Question", "", q, "", "## Answer", "", resolve_citations(turn.get("answer") or "", chunks), ""]
+    return "\n".join(lines)
+
+def note_blockers(turn):
+    """Why a turn cannot become a note, or None."""
+    if not turn:
+        return "nothing to note yet: ask a question first"
+    if turn.get("refused") or is_refusal_text(turn.get("answer") or ""):
+        return "nothing to note: the last answer was a refusal"
+    bad = [w for w in (turn.get("warnings") or []) if w.startswith(FAIL_WARNINGS)]
+    if bad:
+        return "not saved: the last answer is not usable (" + bad[0].split(":")[0] + ")"
+    if not (turn.get("answer") or "").strip():
+        return "nothing to note: the last answer is empty"
+    return None
+
+def write_note(matter, turn, now=None):
+    """Save a remembered turn under docs/model-notes/. Returns the path.
+    Raises ValueError with the reason when the turn is not noteworthy."""
+    why = note_blockers(turn)
+    if why:
+        raise ValueError(why)
+    d = os.path.join(matter_dir(matter), "docs", MODEL_NOTES)
+    os.makedirs(d, exist_ok=True)
+    day = (now or time.strftime("%Y-%m-%d %H:%M"))[:10]
+    base = f"{day}-{note_slug(turn.get('question'))}"
+    path, n = os.path.join(d, base + ".md"), 1
+    while os.path.exists(path):
+        n += 1
+        path = os.path.join(d, f"{base}-{n}.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(render_note(turn, now))
+    return path
+
+def drop_note(path):
+    """Delete a note written in this session. Returns a message."""
+    if not path:
+        return "no note to drop (nothing was saved in this session)"
+    if not os.path.exists(path):
+        return f"already gone: {os.path.basename(path)}"
+    os.remove(path)
+    return f"dropped {os.path.relpath(path, BASE)}"
+
+def list_notes(matter, index=None):
+    """[(folder, name, first heading, indexed)] for notes/ and model-notes/."""
+    indexed = set((index or {}).get("files") or {})
+    out = []
+    for folder in (NOTES, MODEL_NOTES):
+        d = os.path.join(matter_dir(matter), "docs", folder)
+        if not os.path.isdir(d):
+            continue
+        for name in sorted(os.listdir(d)):
+            if _hidden(name) or not name.lower().endswith((".md", ".markdown", ".txt")):
+                continue
+            head = ""
+            try:
+                with open(os.path.join(d, name), encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip():
+                            head = line.strip().lstrip("# ").strip()
+                            break
+            except OSError:
+                pass
+            out.append((folder, name, head[:70], f"{folder}/{name}" in indexed))
+    return out
+
 # ---------------- chat ----------------
 #
 # Layout of this section:
@@ -1517,6 +1634,8 @@ CHAT_COMMANDS = [
     ("reason",   "<question>",     "think, compute and compare over the sources; conclusions are labeled [INFERENCE]", None),
     ("think",    "[on|off]",       "show the /reason thinking trace in gray as it streams; no value toggles", None),
     ("clear",    "",               "forget the previous turn (the next /reason starts fresh)",  None),
+    ("note",     "[drop]",         "save the last answer under docs/model-notes/ (derived, not a source for plain questions); drop = delete it", None),
+    ("notes",    "",               "list docs/notes/ (yours) and docs/model-notes/ (saved answers)", None),
     ("set",      "<key> <value>",  "top-k | min-score | dense-min | think-budget",           "keys"),
     ("diverse",  "[on|off]",       "diverse retrieval; no value toggles",                    None),
     ("show",     "",               "print the current settings",                             None),
@@ -1610,7 +1729,8 @@ def sources_block(hits, scored=True, named=None):
         extra = ""
         if scored:
             extra = f"  {DIM}(bm25 {s:.2f}" + (f", cos {cs:.2f}" if cs is not None else "") + f"){RESET}"
-        out.append(f"{DIM}[S{i}]{RESET} {c['file']} > {c['heading'] or '(no heading)'}{extra}")
+        tag = f"{WARN_COLOR}(derived note){RESET} " if is_model_note(c) else ""
+        out.append(f"{DIM}[S{i}]{RESET} {tag}{c['file']} > {c['heading'] or '(no heading)'}{extra}")
     return "\n".join(out)
 
 def context_line(usage, think_tokens=None):
@@ -1703,7 +1823,8 @@ class ChatState:
         self.matter, self.top_k, self.min_score = matter, top_k, min_score
         self.scope, self.dense_min, self.diverse = only, dense_min, diverse
         self.show_thinking = True            # /think: stream the reason-mode trace in gray (default on)
-        self.last_turn = None                # the previous turn, used by the next /reason only
+        self.last_turn = None                # the previous turn, used by the next /reason and /note
+        self.last_note = None                # path of the note written last in this session
         self.think_budget = REASON_GEN["max_tokens"]   # /set think-budget: reason-mode max_tokens
         self.index, self.files = None, []
         self.load()
@@ -1727,9 +1848,10 @@ class ChatState:
                    if self.last_turn else "\nfollow-up context: none"))
 
     def remember(self, audit):
-        """Keep a finished turn for the next /reason; refusals are not kept."""
+        """Keep a finished turn for the next /reason and for /note; refusals are not kept."""
         if audit and not audit.get("refused") and audit.get("answer"):
-            self.last_turn = {"question": audit["question"], "answer": audit["answer"]}
+            self.last_turn = {k: audit.get(k) for k in
+                              ("question", "answer", "mode", "only", "warnings", "chunks", "model", "ts", "refused")}
 
 def erase_typed_rows(prompt, line):
     """Move up over the rows the submitted line took and clear them, so the
@@ -1768,6 +1890,32 @@ def chat_command(state, line, erase=None):
             return True, f"!!  ERROR: {e}"
         state.remember(a)
         return True, ""
+    if cmd == "note":
+        if arg.lower() == "drop":
+            msg = drop_note(state.last_note)
+            if state.last_note and not os.path.exists(state.last_note):
+                state.last_note = None
+            return True, msg
+        if arg:
+            return True, "usage: /note   or   /note drop"
+        try:
+            path = write_note(state.matter, state.last_turn)
+        except ValueError as e:
+            return True, f"/note: {e}"
+        except OSError as e:
+            return True, f"!!  could not write the note: {e}"
+        state.last_note = path
+        return True, (f"saved {os.path.relpath(path, BASE)}\n"
+                      f"(derived note: plain questions never see it; /reason sees it after /reingest; /note drop deletes it)")
+    if cmd == "notes":
+        rows = list_notes(state.matter, state.index)
+        if not rows:
+            return True, f"no notes yet: write markdown into docs/{NOTES}/ (yours) or save an answer with /note"
+        out = ["notes:"]
+        for folder, name, head, indexed in rows:
+            mark = "" if indexed else "  (not indexed yet: /reingest)"
+            out.append(f"  {folder}/{name}  {DIM}{head}{RESET}{mark}")
+        return True, "\n".join(out)
     if cmd == "clear":
         had = state.last_turn is not None
         state.last_turn = None
@@ -2938,6 +3086,89 @@ def selftest(min_score):
           == "- A process is followed [S2][S4][S6].")
     check("cap_citations: one or two citations are left untouched",
           cap_citations("- Alpha quoted $4,800 [S1][S3].") == "- Alpha quoted $4,800 [S1][S3].")
+
+    # notes: the writer, the guards, the exclusion, the label
+    turn = {"question": "What did  Firm Alpha\nquote for a provisional?", "answer": "Alpha quoted $4,800 [S1][S2]. Bravo $6,100 [S1, S2]; see [S9].",
+            "mode": "ask", "only": None, "warnings": ["UNVERIFIED NUMBER: 7"], "model": "qwen-test", "refused": False,
+            "chunks": [{"id": "a", "file": "firm-alpha/fee-proposal.md", "heading": "Fee schedule"},
+                       {"id": "b", "file": "context-summary.md", "heading": ""}]}
+    txt = render_note(turn, now="2026-09-03 21:00")
+    check("note: header says derived, lists model, mode, scope, warnings and sources",
+          "DERIVED NOTE" in txt and "- model: qwen-test" in txt and "- mode: ask" in txt
+          and "- scope: whole matter" in txt and "UNVERIFIED NUMBER: 7" in txt
+          and "S1: firm-alpha/fee-proposal.md > Fee schedule" in txt and "S2: context-summary.md > (no heading)" in txt)
+    check("note: citations resolve to file > heading, groups expand, an unknown label stays",
+          "[S1: firm-alpha/fee-proposal.md > Fee schedule][S2: context-summary.md > (no heading)]" in txt
+          and "[S1: firm-alpha/fee-proposal.md > Fee schedule; S2: context-summary.md > (no heading)]" in txt
+          and "[S9]" in txt)
+    check("note: a multi-line question is flattened in the title and the slug",
+          "# Note: What did Firm Alpha quote for a provisional?" in txt
+          and note_slug(turn["question"]) == "what-did-firm-alpha-quote-for" and note_slug("???") == "note")
+    ko = render_note({"question": "알파 회사의 가출원 수수료는?", "answer": "4,800달러 [S1].", "chunks": [{"id": "k", "file": "a.md", "heading": "h"}]}, now="2026-09-03 21:00")
+    check("note: a Korean question keeps its title and falls back to a plain slug",
+          "# Note: 알파 회사의 가출원 수수료는?" in ko and note_slug("알파 회사의 가출원 수수료는?") == "note"
+          and "[S1: a.md > h]" in ko)
+    check("note: refusals, failed answers and empty answers are not saved",
+          "refusal" in (note_blockers({"question": "q", "answer": "Not specified in the sources.", "refused": False}) or "")
+          and "refusal" in (note_blockers({"question": "q", "answer": "x", "refused": True}) or "")
+          and "TRUNCATED" in (note_blockers({"question": "q", "answer": "x", "warnings": ["TRUNCATED: y"]}) or "")
+          and "empty" in (note_blockers({"question": "q", "answer": "  "}) or "")
+          and "ask a question first" in (note_blockers(None) or "")
+          and note_blockers(turn) is None)
+    tmp_root = tempfile.mkdtemp()
+    tm = "selftest-notes"
+    os.makedirs(os.path.join(tmp_root, "matters", tm, "docs"))
+    real_base = BASE
+    try:
+        globals()["BASE"] = tmp_root
+        p1 = write_note(tm, turn, now="2026-09-03 21:00")
+        p2 = write_note(tm, turn, now="2026-09-03 21:05")
+        check("note: files land in docs/model-notes/ with a dated slug, a second note gets -2",
+              p1.endswith(os.path.join("docs", "model-notes", "2026-09-03-what-did-firm-alpha-quote-for.md"))
+              and p2.endswith("-2.md") and os.path.exists(p1) and os.path.exists(p2))
+        os.makedirs(os.path.join(tmp_root, "matters", tm, "docs", "notes"))
+        with open(os.path.join(tmp_root, "matters", tm, "docs", "notes", "call-with-alpha.md"), "w") as f:
+            f.write("# Call with Alpha 2026-09-01\n- Morgan said the discount is dead.\n")
+        rows = list_notes(tm, {"files": {"model-notes/" + os.path.basename(p1): 1}})
+        check("notes: lists both folders, first heading shown, index state marked",
+              [(r[0], r[3]) for r in rows] == [("notes", False), ("model-notes", False), ("model-notes", True)]
+              and rows[0][2] == "Call with Alpha 2026-09-01")
+        check("note drop: deletes the last note once, then reports it is gone, none = message",
+              drop_note(p2).startswith("dropped") and not os.path.exists(p2)
+              and drop_note(p2).startswith("already gone") and drop_note(None).startswith("no note to drop"))
+        idx_t = ingest(tm, quiet=True)
+        check("ingest: a saved note and a user note become chunks under their folders",
+              any(is_model_note(c) for c in idx_t["chunks"])
+              and any(c["file"].startswith("notes/") for c in idx_t["chunks"]))
+        sb = sources_block([(1.0, None, c) for c in idx_t["chunks"] if is_model_note(c)][:1])
+        check("display: a model-note source carries the derived-note label", "(derived note)" in sb)
+        st5 = ChatState(tm)
+        check("chat: /note with no turn explains, /notes lists, /note drop with none explains",
+              chat_command(st5, "/note")[1] == "/note: nothing to note yet: ask a question first"
+              and chat_command(st5, "/notes")[1].startswith("notes:")
+              and chat_command(st5, "/note drop")[1].startswith("no note to drop")
+              and chat_command(st5, "/note now")[1].startswith("usage: /note"))
+        st5.remember({"question": "Q?", "answer": "A [S1].", "refused": False, "mode": "reason", "only": "firm-alpha",
+                      "warnings": [], "chunks": [{"id": "x", "file": "f.md", "heading": "h"}], "model": "m", "ts": "t"})
+        msg = chat_command(st5, "/note")[1]
+        check("chat: /note saves the remembered turn and /note drop removes that file",
+              msg.startswith("saved ") and st5.last_note and os.path.exists(st5.last_note)
+              and "- scope: firm-alpha" in open(st5.last_note, encoding="utf-8").read()
+              and chat_command(st5, "/note drop")[1].startswith("dropped") and st5.last_note is None)
+        st5.remember({"question": "Q?", "answer": "Not specified in the sources.", "refused": False, "warnings": [], "chunks": []})
+        check("chat: /note after a refusal is refused", "refusal" in chat_command(st5, "/note")[1])
+    finally:
+        globals()["BASE"] = real_base
+        shutil.rmtree(tmp_root, ignore_errors=True)
+    fake = [{"id": "1", "file": "firm-alpha/fee.md", "heading": "", "text": "alpha provisional fee 4800", "tokens": ["alpha", "provisional", "fee", "4800"]},
+            {"id": "2", "file": "model-notes/2026-09-03-x.md", "heading": "", "text": "alpha provisional fee 4800 derived", "tokens": ["alpha", "provisional", "fee", "4800", "derived"]}]
+    check("retrieval: is_model_note keys on the folder",
+          is_model_note(fake[1]) and not is_model_note(fake[0]))
+    rp_text = open(os.path.join(BASE, "reason-prompt.txt"), encoding="utf-8").read()
+    check("note: reason-prompt.txt tells the model a model-notes source is derived", "model-notes" in rp_text)
+    readme_t = open(os.path.join(BASE, "README.md"), encoding="utf-8").read()
+    check("note: README documents the notes folder and the model-notes rules",
+          "docs/notes/" in readme_t and "model-notes" in readme_t)
 
     # per-folder retrieval for questions that name several firms
     sc = load_index("synthetic-counsel")["chunks"]

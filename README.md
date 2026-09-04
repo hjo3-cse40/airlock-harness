@@ -79,6 +79,8 @@ Commands:
 | `/reason <question>` | think first, then compute and compare over the sources; conclusions are labeled `[INFERENCE]` (slower, lower trust) |
 | `/think [on\|off]` | show the `/reason` thinking trace in gray as it streams; no value toggles (default on; off shows a counter instead) |
 | `/clear` | forget the previous turn, so the next `/reason` starts fresh |
+| `/note` | save the last answer as a file under `docs/model-notes/` (derived, see below); `/note drop` deletes it |
+| `/notes` | list `docs/notes/` (yours) and `docs/model-notes/` (saved answers), and which are indexed |
 | `/set <key> <value>` | `top-k`, `min-score` (BM25 gate), `dense-min` (cosine gate), `think-budget` (reason-mode `max_tokens`, default 8000) |
 | `/diverse [on\|off]` | best chunk per source first; no value toggles |
 | `/show` | print the current settings |
@@ -141,6 +143,28 @@ equal share of top-k), then the remaining slots fill from the whole matter.
 This is what keeps a firm's provisional fee AND its utility fee in the prompt
 when they sit in different chunks; plain ranking would let the strongest firm
 take every slot. The sources line says `per folder: ...` when this happened.
+
+## Notes: building a knowledge base
+
+Two folders under `docs/`, with different trust:
+
+- **`docs/notes/` is yours.** Write markdown there: what a firm said on a
+  call, a decision, a correction to a document. Run `/reingest`, and the
+  notes are sources like any document, cited as `notes/<file> > <heading>`.
+  This is the recommended way to add knowledge. Date every fact and say
+  where it came from, because a note will outrank your memory of the email
+  later. A useful start: one file per firm with its fee table in one
+  place, and one `decisions.md`.
+- **`docs/model-notes/` is derived.** `/note` saves the last answer there
+  with a header (derived, model, date, mode, scope, warnings, the sources
+  it used) and every `[S#]` resolved to the file and heading it pointed to.
+  Rules that keep it honest: a plain question never retrieves from this
+  folder, so a saved inference cannot come back as a cited fact on the
+  validated path; `/reason` may use it, the sources list marks it
+  `(derived note)`, and the prompt tells the model to prefer the original
+  document; `/scope model-notes` asks over the notes alone. A refusal, an
+  empty answer, or an answer with a TRUNCATED, LOOP, EMPTY or NO THINKING
+  warning is never saved. Notes join the index on the next `/reingest`.
 
 ## How it works
 
