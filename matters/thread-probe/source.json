@@ -1,0 +1,2052 @@
+{
+ "_about": "Synthetic, fictional test corpus for airlock-harness: a self-forwarded email chain about a community garden expansion, whose second message is a long reply from the director. Built into docs/ by make_thread_probe.py. No real people, organisations, or places.",
+ "forward": {
+  "date_rfc2822": "Tue, 12 May 2026 08:05:00 -0700",
+  "from_name": "Maya Reyes",
+  "from_addr": "m.reyes@riversidegarden.example",
+  "to_name": "Maya Reyes",
+  "to_addr": "m.reyes@riversidegarden.example",
+  "subject": "FW: Expansion plan: one-page proposal for your approval",
+  "note": "Saving this thread for my records."
+ },
+ "messages": [
+  {
+   "n": 1,
+   "date_iso": "2026-05-04T08:47:00-07:00",
+   "date_rfc2822": "Mon, 04 May 2026 08:47:00 -0700",
+   "from_name": "Maya Reyes",
+   "from_addr": "m.reyes@riversidegarden.example",
+   "to_name": "Daniel Okonkwo",
+   "to_addr": "d.okonkwo@riversidegarden.example",
+   "cc_name": "",
+   "cc_addr": "",
+   "subject": "Expansion plan: one-page proposal for your approval",
+   "attachments": [
+    "expansion-plan.pdf"
+   ],
+   "body": "Daniel,\n\nAttached is the one-page expansion plan for the lot next door (expansion-plan.pdf). It is the version we walked through at the last work day, cleaned up with the cost figures Priya asked for and a simple drawing of the layout. I would like your approval on four things so I can start lining up vendors and volunteers:\n\n1. The total budget of $41,250 for the first season on the new lot.\n2. Hiring Hollis Irrigation to run the water line from the meter to the far corner.\n3. Building the greenhouse this season rather than waiting a year.\n4. Starting the school program with Alder Hollow Elementary in the raised beds.\n\nIf you approve, I would like to start work in June so the beds are filled before the heat sets in. I know the greenhouse is the piece you are most likely to push back on, so I kept it as its own line in the plan and it can come out without changing the rest.\n\nThank you,\nMaya\n\nMaya Reyes\nProgram Coordinator, Riverside Community Garden"
+  },
+  {
+   "n": 2,
+   "date_iso": "2026-05-07T13:52:00-07:00",
+   "date_rfc2822": "Thu, 07 May 2026 13:52:00 -0700",
+   "from_name": "Daniel Okonkwo",
+   "from_addr": "d.okonkwo@riversidegarden.example",
+   "to_name": "Maya Reyes",
+   "to_addr": "m.reyes@riversidegarden.example",
+   "cc_name": "Priya Nair",
+   "cc_addr": "p.nair@riversidegarden.example",
+   "subject": "RE: Expansion plan: one-page proposal for your approval",
+   "attachments": [],
+   "body": "Maya,\n\nThank you for the plan. I read it twice, once on the bus and once at my desk with Priya's notes beside me, and I want to give you a real answer rather than a quick one. The short version is this: I approve the expansion in principle, with changes. The lot is the right move, the timing is right, and the plan is clearer than anything we have put in front of the board before. But I am not approving the total as proposed, there are a couple of things in it I am turning down, and there are a couple more I am not ready to decide on until we know more. Everything below is meant to get you to a revised plan that I can sign without a second round of notes. Priya is copied because the money parts are hers to hold me to, and because she will be the one writing the checks.\n\nBudget\n\nYou proposed a total of $41,250. I am lowering the cap to $34,000. That is the number I can defend to the board this spring, and it is the number I want the revised plan built around. The gap comes mostly from the greenhouse, which I am pulling out of this season (more on that below), and from the second shed, which I am not approving at all. Everything else in your plan survives, some of it in a smaller form, and I have tried to say exactly which parts shrink and why.\n\nTwo rules for how the cap works. First, the cap is a ceiling, not a target. If the water line and the beds come in under it, the difference stays in the general fund; it does not get spent on extras in August because we happened to have it. Second, nothing gets ordered until the permit application is filed, because the permit could change the layout and I do not want lumber sitting in the rain while we wait on the city.\n\nPriya's view is that the water line is the one item we cannot cut, because every other piece of this project can be done by hand later if the money runs short, and a lot without water is just a field. I agree with her, and it shaped the order of what I kept. She also asked me to say plainly that the bakery money is a pledge, not cash in the bank, and the cap does not assume it arrives.\n\nThe Two-Season Rule\n\nI am going to use a phrase in this note that you have heard me use at board meetings, so let me define it once. The two-season rule means that nothing permanent gets built on the new lot until we have gardened it through two full seasons, one spring and one fall.\n\nPermanent means anything with a footing, a concrete pad, a poured base, or any foundation that cannot be moved with a truck and a few volunteers on a Saturday. Raised beds, the water line, a shed on skids, and fencing are not permanent under this rule because we can shift them once we learn the lot. The point is simple: we do not yet know where the water pools after a storm, where the shade falls in October, or whether the volunteer count holds after the first summer. Two seasons of watching answers all of that for free. Building first and learning second costs real money, and we have done it before on the old lot with the first shed, which we moved twice before it found a home.\n\nPlots, Beds and Soil\n\nI am approving 24 in-ground plots on the new lot. That is the count I can staff and water this year, and it leaves the strip along the north fence open for the shed and a path wide enough for two wheelbarrows to pass. Please lay the plots out so a full row can be closed off if we come up short on gardeners; I would rather have a tidy empty row than a scattered set of empty plots that make the lot look abandoned from the street.\n\nI am approving 14 raised beds. Put them nearest the gate, because they are the ones the school groups and the older members will use, and I want them reachable without walking the whole lot. Cedar, not treated lumber, same as the old lot. If the cedar price has moved since you priced it, tell me before you order, because that is the line most likely to surprise us.\n\nOn soil, the compost share of the fill mix should be no more than 35%. The rest is screened topsoil. The old lot taught us that a heavier compost mix sinks a hand's width by midsummer and the beds end up half empty by the time the tomatoes need support. I have set aside $2,850 for the soil delivery, which is the quote from the yard we used last year, delivered and dumped in one load so we are not paying for two trucks. If you can find the same grade cheaper, the savings stay in the general fund per the rule above.\n\nWater Lines\n\nThis is the piece I care most about getting right, and it is the biggest single line under the cap. Hollis Irrigation quoted $6,900 for the main line from the meter to the far corner, with a spigot at the end of each row. That quote is fair, the crew did good work for the church garden on Bell Street, and I want to take it. They asked for a deposit of $1,600 before they schedule the trenching, and I am approving that deposit. The balance is due only after the city inspector has signed off on the open trench, not before, and that needs to be written into the contract rather than agreed on the phone. If Hollis will not put it in writing, we get a second bid.\n\nHollis can trench from June 16 to July 10. Anything later runs into the heat and into the school program, so I want us on their calendar as soon as the permit application is filed. If they slip past that window, we talk again before any more money moves, because a trench open in late July is a hazard and a mud pit at the same time.\n\nOne more thing on water. Please ask Hollis to leave a capped stub at the northwest corner. It costs almost nothing while the trench is open, and it means that if the greenhouse is ever built, we do not dig the lot up a second time.\n\nTool Shed\n\nYes to a shed on the new lot, at $1,380 for the kit and the skids, built by volunteers the way the old one was. Put it against the north fence where it does not shade any plot, with the door facing the path. Build it on skids, not on a pad, so it stays movable under the two-season rule, and anchor it with the screw-in stakes we already own.\n\nNo to the second, larger shed shown in your plan. The reason is simple: the old lot's shed is a short walk away, we already have more shelves than tools, and a second large shed spends money on storage for things we do not own yet. If storage becomes a real problem after two seasons, we can revisit it at the same time as the greenhouse, and by then we will know whether the problem is space or tidiness.\n\nGreenhouse\n\nI am deferring the greenhouse. I will decide after the permit comes back from the city, because the greenhouse is the one item on the plan that the city could ask us to move, resize, or drop altogether, and I do not want to spend a dollar or a volunteer hour on it before we know. The Site Layout section of the attached plan shows it in the northwest corner, which is also the lowest point on the lot, and that alone makes me want to see the ground after a hard rain before we commit to glass and framing there.\n\nThe $9,750 estimate stays in the plan as a line for next year so the board sees where the money would go, but it sits above the cap and does not get spent this season. I know this is the piece you care about most. I am not saying no to it. I am saying not yet, and I am telling you exactly what would change my mind: a clean permit, a dry corner after the first storms, and a volunteer roster that holds through August.\n\nCity Permit\n\nI filed the pre-application on Tuesday. Lena Whitfield, the permits clerk at the city building office, walked me through the process, and she was clear and helpful in a way I did not expect from a city counter. The permit fee is $475, paid to the city at the time we file the full application. That money goes to the city, not to any of our vendors, and we do not get it back if the permit is denied, so I want the application right the first time.\n\nLena's advice was to file the beds, the water line, and the shed as one application and to leave the greenhouse off entirely, since adding it later is a simple amendment and including it now triggers a longer review. That is what we will do. She also said the review runs faster if the drawing shows the property line and the meter location, so please make sure the revised drawing has both, drawn to scale, with north marked.\n\nVolunteers\n\nWe have 46 active volunteers on the spring roster, which is more than we have ever had at this point in the year. That is the reason I am comfortable with the plot and bed counts above rather than something smaller. Please assign a row captain to each row before the first work day, and keep the work days to Saturday mornings so the neighbors know when to expect trucks and noise. I would also like the sign-up sheet for the new lot to open to current members first, for two weeks, before it opens to the waiting list.\n\nNo to the paid weekend crew leader. I understand why you asked, and I know it would make your Saturdays easier. But paying one volunteer changes how every other volunteer sees the work, and once we start we cannot easily stop. There is also no room for it under the cap. If we need a steadier hand on Saturdays, I would rather rotate the row captains through that role for a month at a time and thank them properly at the fall dinner.\n\nMiller's Bakery\n\nThe Millers have pledged $3,200 toward the expansion, and they will give us 27% of the price of every garden loaf they sell in June. I am grateful, and I want us to be good partners in return: a thank-you in the newsletter, a bed by the gate planted with the herbs they use, and an invitation to the first work day with a photo for their wall. I am treating the pledge as an addition to the cap when it arrives, not as part of it, for the reason Priya gave.\n\nI am deferring the question of a sign with the bakery's name on it. I will decide after Priya has reviewed the partnership letter the Millers sent, because I want to be sure the letter does not ask for anything we cannot give, and because a sign at the street may need its own permit. Do not promise a sign in the meantime, even casually.\n\nSchool Program\n\nYes to the school program with Alder Hollow Elementary, provided that the school sends a signed letter from its principal that names the adults who will supervise each visit and confirms that every visit ends before the afternoon heat. I am not willing to run children's groups on the new lot on a handshake, and I do not want our volunteers acting as the only adults present. Once the letter is in hand, use the raised beds nearest the gate for the program and keep the in-ground plots for members, so the two groups are not tripping over each other.\n\nRequests and Deadlines\n\nThree things I need from you, each with a date.\n\nFirst, send me a revised one-page budget at or under the new cap by Friday, May 15. Keep the same line items as the original so Priya can compare them side by side without rebuilding her sheet.\n\nSecond, send me the Hollis contract with the deposit and the inspection clause written in, by Thursday, May 21. I will sign it the day it arrives if the clause is there.\n\nThird, send me the plot layout and the row captain list for the new lot by Friday, May 29, so we can post both on the board at the gate before the meeting.\n\nQuestions for You\n\nA few things I could not tell from the plan, and I would rather have your answers before the meeting than during it.\n\n1. Do we own the fence on the shared line with the lot to the east, or does the city?\n2. How many of the raised beds do you want built at wheelchair height?\n3. Who at Alder Hollow Elementary is our contact for the school program, and have they seen the lot?\n4. Has anyone walked the lot after a heavy rain to see where the water sits?\n\nLet's meet on Tuesday, May 19 at 6:30 p.m. in the garden office to go through the revised plan together. Bring the drawing, and bring Priya's sheet if she has it ready by then. This is good work, Maya. The changes above are about pace and money, not about whether we do this. We are doing this.\n\nDaniel\n\nDaniel Okonkwo\nExecutive Director, Riverside Community Garden"
+  },
+  {
+   "n": 3,
+   "date_iso": "2026-05-08T11:57:00-07:00",
+   "date_rfc2822": "Fri, 08 May 2026 11:57:00 -0700",
+   "from_name": "Maya Reyes",
+   "from_addr": "m.reyes@riversidegarden.example",
+   "to_name": "Daniel Okonkwo",
+   "to_addr": "d.okonkwo@riversidegarden.example",
+   "cc_name": "",
+   "cc_addr": "",
+   "subject": "RE: Expansion plan: one-page proposal for your approval",
+   "attachments": [],
+   "body": "Daniel,\n\nThank you for such a careful reply, and for the yes. I will have the revised budget to you before Friday, and I have already asked Hollis to add the inspection clause to the contract. I will also redraw the layout to scale with north marked, as Lena asked. Three questions before I rework the plan:\n\n1. For the $1,600 deposit to Hollis, should it come out of the general account or the expansion account Priya set up last month?\n2. Does the 35% compost limit apply to the raised beds too, or only to the in-ground plots?\n3. Do you want the Alder Hollow program to start in June this year, or would you rather hold it until the fall?\n\nMaya\n\nMaya Reyes\nProgram Coordinator, Riverside Community Garden"
+  },
+  {
+   "n": 4,
+   "date_iso": "2026-05-11T13:49:00-07:00",
+   "date_rfc2822": "Mon, 11 May 2026 13:49:00 -0700",
+   "from_name": "Daniel Okonkwo",
+   "from_addr": "d.okonkwo@riversidegarden.example",
+   "to_name": "Maya Reyes",
+   "to_addr": "m.reyes@riversidegarden.example",
+   "cc_name": "",
+   "cc_addr": "",
+   "subject": "RE: Expansion plan: one-page proposal for your approval",
+   "attachments": [],
+   "body": "Maya,\n\nQuick answers, since I am between meetings and do not want these to wait.\n\nOn your first question: the deposit comes out of the expansion account, not the general account. Priya will write the check the same day the countersigned Hollis contract arrives, so send the contract to her and copy me.\n\nOn your second question: the compost limit applies only to the in-ground plots. The raised beds can go up to half compost, because the cedar boxes drain and the mix will not sit wet the way the clay does.\n\nOn your third question, I'd rather wait until I have walked the lot with the Alder Hollow principal in person before we pick a start season. That will not happen before the meeting, so leave the program start open in the revised plan and we will settle it once I have met her.\n\nOne change from my last note. I said the shed should go against the north fence. Lena Whitfield told me on the phone that the north line falls inside the city's setback, so put it in the east corner by the gate instead. Same kit, same skids, and it still shades no plot.\n\nDaniel\n\nDaniel Okonkwo\nExecutive Director, Riverside Community Garden"
+  }
+ ],
+ "facts": [
+  {
+   "id": "F01",
+   "message_n": 1,
+   "category": "date",
+   "statement": "Maya proposes starting work on the new lot in June.",
+   "exact_phrase": "I would like to start work in June",
+   "key_tokens": [
+    "June"
+   ]
+  },
+  {
+   "id": "F02",
+   "message_n": 1,
+   "category": "budget",
+   "statement": "Maya's proposed total budget for the first season is $41,250.",
+   "exact_phrase": "The total budget of $41,250 for the first season",
+   "key_tokens": [
+    "$41,250"
+   ]
+  },
+  {
+   "id": "F03",
+   "message_n": 1,
+   "category": "attachment_ref",
+   "statement": "Maya attached the one-page plan as expansion-plan.pdf.",
+   "exact_phrase": "expansion plan for the lot next door (expansion-plan.pdf)",
+   "key_tokens": [
+    "expansion-plan.pdf"
+   ]
+  },
+  {
+   "id": "F04",
+   "message_n": 2,
+   "category": "verdict",
+   "statement": "Daniel approves the expansion in principle, with changes.",
+   "exact_phrase": "I approve the expansion in principle, with changes",
+   "key_tokens": [
+    "approve",
+    "in principle",
+    "changes"
+   ]
+  },
+  {
+   "id": "F05",
+   "message_n": 2,
+   "category": "budget",
+   "statement": "Daniel lowers the budget cap to $34,000 from Maya's proposed $41,250.",
+   "exact_phrase": "I am lowering the cap to $34,000",
+   "key_tokens": [
+    "$34,000",
+    "lowering"
+   ]
+  },
+  {
+   "id": "F06",
+   "message_n": 2,
+   "category": "attributed_opinion",
+   "statement": "Priya's view is that the water line is the one item that cannot be cut.",
+   "exact_phrase": "Priya's view is that the water line is the one item we cannot cut",
+   "key_tokens": [
+    "Priya",
+    "water line"
+   ]
+  },
+  {
+   "id": "F07",
+   "message_n": 2,
+   "category": "term",
+   "statement": "The two-season rule: nothing permanent is built on the new lot until it has been gardened through two full seasons.",
+   "exact_phrase": "nothing permanent gets built on the new lot",
+   "key_tokens": [
+    "permanent",
+    "two full seasons"
+   ]
+  },
+  {
+   "id": "F08",
+   "message_n": 2,
+   "category": "count",
+   "statement": "Daniel approves 24 in-ground plots on the new lot.",
+   "exact_phrase": "I am approving 24 in-ground plots on the new lot",
+   "key_tokens": [
+    "24"
+   ]
+  },
+  {
+   "id": "F09",
+   "message_n": 2,
+   "category": "count",
+   "statement": "Daniel approves 14 raised beds, placed nearest the gate.",
+   "exact_phrase": "I am approving 14 raised beds",
+   "key_tokens": [
+    "14"
+   ]
+  },
+  {
+   "id": "F10",
+   "message_n": 2,
+   "category": "percent",
+   "statement": "Compost share of the fill mix must be no more than 35%.",
+   "exact_phrase": "compost share of the fill mix should be no more than 35%",
+   "key_tokens": [
+    "35%"
+   ]
+  },
+  {
+   "id": "F11",
+   "message_n": 2,
+   "category": "budget",
+   "statement": "Daniel set aside $2,850 for the soil delivery.",
+   "exact_phrase": "I have set aside $2,850 for the soil delivery",
+   "key_tokens": [
+    "$2,850"
+   ]
+  },
+  {
+   "id": "F12",
+   "message_n": 2,
+   "category": "budget",
+   "statement": "Hollis Irrigation quoted $6,900 for the main water line.",
+   "exact_phrase": "Hollis Irrigation quoted $6,900 for the main line",
+   "key_tokens": [
+    "$6,900",
+    "Hollis"
+   ]
+  },
+  {
+   "id": "F13",
+   "message_n": 2,
+   "category": "fee",
+   "statement": "Daniel approves a $1,600 deposit to Hollis Irrigation before trenching is scheduled.",
+   "exact_phrase": "a deposit of $1,600 before they schedule the trenching",
+   "key_tokens": [
+    "$1,600",
+    "deposit"
+   ]
+  },
+  {
+   "id": "F14",
+   "message_n": 2,
+   "category": "range",
+   "statement": "Hollis can trench from June 16 to July 10.",
+   "exact_phrase": "Hollis can trench from June 16 to July 10",
+   "key_tokens": [
+    "June 16",
+    "July 10"
+   ]
+  },
+  {
+   "id": "F15",
+   "message_n": 2,
+   "category": "budget",
+   "statement": "The tool shed kit and skids are approved at $1,380.",
+   "exact_phrase": "at $1,380 for the kit and the skids",
+   "key_tokens": [
+    "$1,380"
+   ]
+  },
+  {
+   "id": "F16",
+   "message_n": 2,
+   "category": "reject",
+   "statement": "Daniel rejects the second, larger shed because the old shed is close by and it would pay for storage of things they do not own.",
+   "exact_phrase": "No to the second, larger shed shown in your plan",
+   "key_tokens": [
+    "no",
+    "second",
+    "shed"
+   ]
+  },
+  {
+   "id": "F17",
+   "message_n": 2,
+   "category": "defer",
+   "statement": "Daniel defers the greenhouse; he will decide after the permit comes back from the city.",
+   "exact_phrase": "I will decide after the permit comes back from the city",
+   "key_tokens": [
+    "greenhouse",
+    "permit"
+   ]
+  },
+  {
+   "id": "F18",
+   "message_n": 2,
+   "category": "attachment_ref",
+   "statement": "The Site Layout section of the attached plan places the greenhouse in the northwest corner, the lowest point on the lot.",
+   "exact_phrase": "The Site Layout section of the attached plan shows it in the northwest corner",
+   "key_tokens": [
+    "Site Layout",
+    "northwest"
+   ]
+  },
+  {
+   "id": "F19",
+   "message_n": 2,
+   "category": "budget",
+   "statement": "The greenhouse estimate of $9,750 stays in the plan as a line for next year, above the cap.",
+   "exact_phrase": "The $9,750 estimate stays in the plan as a line for next year",
+   "key_tokens": [
+    "$9,750"
+   ]
+  },
+  {
+   "id": "F20",
+   "message_n": 2,
+   "category": "contact",
+   "statement": "Lena Whitfield is the permits clerk at the city building office who walked Daniel through the permit process.",
+   "exact_phrase": "Lena Whitfield, the permits clerk at the city building office",
+   "key_tokens": [
+    "Lena Whitfield",
+    "permits clerk"
+   ]
+  },
+  {
+   "id": "F21",
+   "message_n": 2,
+   "category": "fee",
+   "statement": "The city permit fee is $475, paid to the city when the full application is filed, and it is not refunded if denied.",
+   "exact_phrase": "The permit fee is $475, paid to the city",
+   "key_tokens": [
+    "$475",
+    "city"
+   ]
+  },
+  {
+   "id": "F22",
+   "message_n": 2,
+   "category": "count",
+   "statement": "There are 46 active volunteers on the spring roster.",
+   "exact_phrase": "We have 46 active volunteers on the spring roster",
+   "key_tokens": [
+    "46"
+   ]
+  },
+  {
+   "id": "F23",
+   "message_n": 2,
+   "category": "reject",
+   "statement": "Daniel rejects the paid weekend crew leader because paying one volunteer changes how the others see the work and there is no room under the cap.",
+   "exact_phrase": "No to the paid weekend crew leader",
+   "key_tokens": [
+    "no",
+    "crew leader"
+   ]
+  },
+  {
+   "id": "F24",
+   "message_n": 2,
+   "category": "budget",
+   "statement": "Miller's Bakery has pledged $3,200 toward the expansion.",
+   "exact_phrase": "The Millers have pledged $3,200 toward the expansion",
+   "key_tokens": [
+    "$3,200",
+    "Miller"
+   ]
+  },
+  {
+   "id": "F25",
+   "message_n": 2,
+   "category": "percent",
+   "statement": "Miller's Bakery will give 27% of the price of every garden loaf sold in June.",
+   "exact_phrase": "27% of the price of every garden loaf they sell in June",
+   "key_tokens": [
+    "27%",
+    "loaf"
+   ]
+  },
+  {
+   "id": "F26",
+   "message_n": 2,
+   "category": "defer",
+   "statement": "Daniel defers the bakery sign; he will decide after Priya has reviewed the partnership letter.",
+   "exact_phrase": "I will decide after Priya has reviewed the partnership letter",
+   "key_tokens": [
+    "sign",
+    "Priya",
+    "letter"
+   ]
+  },
+  {
+   "id": "F27",
+   "message_n": 2,
+   "category": "conditional",
+   "statement": "The Alder Hollow Elementary school program is approved provided the school sends a signed letter from its principal naming supervising adults.",
+   "exact_phrase": "provided that the school sends a signed letter from its principal",
+   "key_tokens": [
+    "provided",
+    "signed letter",
+    "principal"
+   ]
+  },
+  {
+   "id": "F28",
+   "message_n": 2,
+   "category": "request_deadline",
+   "statement": "Maya must send a revised one-page budget at or under the cap by Friday, May 15.",
+   "exact_phrase": "budget at or under the new cap by Friday, May 15",
+   "key_tokens": [
+    "May 15",
+    "budget"
+   ]
+  },
+  {
+   "id": "F29",
+   "message_n": 2,
+   "category": "request_deadline",
+   "statement": "Maya must send the Hollis contract with the deposit and inspection clause by Thursday, May 21.",
+   "exact_phrase": "inspection clause written in, by Thursday, May 21",
+   "key_tokens": [
+    "May 21",
+    "contract"
+   ]
+  },
+  {
+   "id": "F30",
+   "message_n": 2,
+   "category": "request_deadline",
+   "statement": "Maya must send the plot layout and row captain list by Friday, May 29.",
+   "exact_phrase": "row captain list for the new lot by Friday, May 29",
+   "key_tokens": [
+    "May 29",
+    "layout"
+   ]
+  },
+  {
+   "id": "F31",
+   "message_n": 2,
+   "category": "question",
+   "statement": "Daniel asks whether the garden or the city owns the fence on the shared line with the lot to the east.",
+   "exact_phrase": "Do we own the fence on the shared line with the lot to the east",
+   "key_tokens": [
+    "fence",
+    "east"
+   ]
+  },
+  {
+   "id": "F32",
+   "message_n": 2,
+   "category": "question",
+   "statement": "Daniel asks how many of the raised beds should be built at wheelchair height.",
+   "exact_phrase": "How many of the raised beds do you want built at wheelchair height",
+   "key_tokens": [
+    "wheelchair"
+   ]
+  },
+  {
+   "id": "F33",
+   "message_n": 2,
+   "category": "meeting",
+   "statement": "The next meeting is Tuesday, May 19 at 6:30 p.m. in the garden office.",
+   "exact_phrase": "Tuesday, May 19 at 6:30 p.m. in the garden office",
+   "key_tokens": [
+    "Tuesday",
+    "May 19",
+    "6:30"
+   ]
+  },
+  {
+   "id": "F34",
+   "message_n": 3,
+   "category": "question",
+   "statement": "Maya asks whether the $1,600 Hollis deposit comes from the general account or the expansion account.",
+   "exact_phrase": "the general account or the expansion account Priya set up",
+   "key_tokens": [
+    "expansion account",
+    "general account"
+   ]
+  },
+  {
+   "id": "F35",
+   "message_n": 4,
+   "category": "followup_answer",
+   "statement": "The deposit comes out of the expansion account; Priya writes the check the day the countersigned contract arrives.",
+   "exact_phrase": "the deposit comes out of the expansion account",
+   "key_tokens": [
+    "expansion account",
+    "Priya"
+   ]
+  },
+  {
+   "id": "F36",
+   "message_n": 4,
+   "category": "followup_answer",
+   "statement": "The compost limit applies only to in-ground plots; raised beds can go up to half compost.",
+   "exact_phrase": "The raised beds can go up to half compost",
+   "key_tokens": [
+    "half",
+    "in-ground"
+   ]
+  },
+  {
+   "id": "F37",
+   "message_n": 4,
+   "category": "defer",
+   "statement": "Daniel defers Maya's third question (program start season) until he has walked the lot with the Alder Hollow principal.",
+   "exact_phrase": "I'd rather wait until I have walked the lot with the Alder Hollow principal",
+   "key_tokens": [
+    "wait",
+    "principal"
+   ]
+  },
+  {
+   "id": "F38",
+   "message_n": 4,
+   "category": "changed_position",
+   "statement": "Daniel moves the shed from the north fence to the east corner by the gate because the north line is inside the city's setback.",
+   "exact_phrase": "put it in the east corner by the gate instead",
+   "key_tokens": [
+    "east corner",
+    "setback"
+   ]
+  }
+ ],
+ "absent_topics": [
+  "parking",
+  "insurance",
+  "beekeeping",
+  "chickens",
+  "farmers market",
+  "solar panels",
+  "security cameras",
+  "website"
+ ],
+ "docs": [
+  {
+   "filename": "garden-operations-guide.txt",
+   "purpose": "General operations guide for the existing (old) lot. Look-alike document: same vocabulary as the thread (plots, raised beds, compost share, water line cost, roster size, fees, row captains, school program) with its own different numbers, so a careless reader or a retrieval pass can confuse it with the thread. 16,301 characters, 49 paragraphs, longest 615 characters.",
+   "text": "Riverside Community Garden Operations Guide\n\nAbout This Guide\n\nThis guide collects the working rules of Riverside Community Garden in one place so that a new member, a new row captain, or a new board member can find an answer without asking around. It covers the old lot only, the one behind the community center on Harlow Street, because that is the lot we have gardened long enough to have rules for. Nothing in here is meant to be permanent. When a rule stops working, bring it to a work day or to the office, and we will change it. The Program Coordinator keeps the master copy, and the version on the gate board is the one that counts if two copies disagree.\n\nThe garden runs on three ideas. First, the lot belongs to the members together, not to whoever got there first. Second, water and soil are shared, so what one plot does to either affects the plots beside it. Third, volunteer time is the most valuable thing we have, and every rule below is meant to spend it well. If a rule seems to waste someone's Saturday, it is probably wrong, and we would like to hear about it.\n\nSoil Testing\n\nWe test the soil on the old lot every third season, and we test any new ground before the first bed goes in. The soil testing service the county runs charges $36 per sample, and the results come back in about three weeks. A sample is a mix of small scoops from at least six spots across the area being tested, taken from about a hand's depth, dried on a tray in the office, and bagged with the plot numbers written on the bag. Do not take a sample right after adding compost or lime, because the reading will tell you about the compost, not the ground.\n\nThe office keeps a soil log in the top drawer of the file cabinet. Each result goes in the log with the date, the plots covered, and any action taken. The readings we care about most are pH, organic matter, and lead. Our ground runs a little on the acid side, which most vegetables tolerate, and the lime we add every other fall keeps it in the mid-sixes. Organic matter has climbed steadily since we started composting on site, and we now add compost to hold it rather than to raise it.\n\nLead is the test we do not skip. Any plot within 50 feet of a painted structure, an old shed, or the alley gets a lead test before it is assigned, and again if the structure is scraped or torn down. A plot that tests high is not gardened in the ground. It gets a raised bed with a weed cloth liner and fill brought in from outside, and the log notes why. Members can ask to see the result for their own plot at any time, and new members are told about the lead history of their plot before they sign the plot agreement.\n\nIf a member wants a test outside the regular cycle, they pay the sample fee themselves and the office handles the mailing. The office will not send a sample without the plot number on it, because an unmarked result is useless to everyone.\n\nWater\n\nThe old lot is on a single city meter at the street, and the water bill is paid out of the general fund. In a typical year the bill comes to about $1,150, most of it between June and September. The main line was put in during the garden's second year for $5,400 and has needed only two repairs since, both at the same elbow near the gate. That elbow is marked with a red flag, and anyone digging within a shovel length of it needs to check with the office first.\n\nEach row has a spigot at the path end. Spigots are shared, so hoses do not stay attached between uses, and a hose left on a spigot overnight will be coiled and put in the shed by whoever finds it. Members who want drip lines may run them from the row spigot with a timer, provided the timer is the kind that shuts off on its own and the line is unhooked when the plot is not being watered. A drip run of 45 minutes, twice a week, is the starting point for a full plot in midsummer; adjust from there by putting a finger in the soil, not by watching the plants wilt.\n\nA full plot in July uses roughly 90 gallons a week if it is watered by hand and mulched, and more than that if it is not mulched. Mulch is the cheapest water we have. Bark mulch from the city yard is free for the hauling, and straw is on hand in the shed most of the season. Bare soil in July is a sign that a plot needs help, and the row captain should ask before the plants show it.\n\nWater is shut off at the meter for the winter after the last work day in November and turned on again at the first work day in April. Between those dates, the hose bibs are opened and the lines drained so a hard freeze does not crack them. If you find water running on the lot when no one is watering, close the nearest spigot, then call the office. A running spigot on a weekend can cost more than a plot fee before anyone notices.\n\nTool Care\n\nShared tools live in the shed on the old lot, and the count sheet on the inside of the shed door lists 63 hand tools and nine wheelbarrows. Every tool on the sheet has its handle painted garden green so it does not wander home in the back of someone's truck by mistake. Tools that are not on the sheet belong to someone; ask before you use them, and never sharpen them.\n\nTools go back clean. Scrape the blade, rinse the mud at the shed spigot, and dry it with the rag by the door before hanging it. A tool hung wet rusts by the next work day. Once a month, and always before the winter shutdown, the tool captain wipes every blade with an oily rag and rubs linseed oil into the wooden handles. A splintered handle is smoothed with emery cloth and oiled; a cracked handle is replaced, not taped.\n\nHoes, spades, and edgers get sharpened twice a season, once at the April work day and once in midsummer. Use the file clamped to the bench in the shed, keep the bevel shallow, and file away from your body. Pruners are sharpened by the tool captain only, because a pruner sharpened at the wrong angle is worse than a dull one.\n\nThe wheelbarrows are the tools we lose most often to neglect. Keep the tires pumped, because a soft tire makes a light load feel heavy and turns the paths to ruts. Tip barrows against the shed wall after use so rain does not collect in them. A barrow left full of wet compost over a weekend is a barrow with a rusted tray by fall.\n\nThe shed is locked with a combination padlock. The combination changes at the April work day and is given to plot holders and row captains in person, never by text or email. If you are the last one out, check that both doors are latched and the lock is snapped shut, not just hung on the hasp.\n\nVolunteer Scheduling\n\nShared work days are the first and third Saturday of each month from April through November, starting early and ending at noon. That schedule is fixed so that the neighbors know when to expect trucks, tools, and voices, and so that nobody has to guess. If a work day has to move for weather, the change goes on the gate board and out on the email list by Thursday evening, and the rain date is the following Saturday.\n\nEvery plot holder gives 18 hours of shared work each season, tracked on the sign-in sheet at the shed. Shared work means work that helps the whole lot: paths, compost, the shed, the fence, the water line, the front border, and the school and neighbor programs. Time spent on your own plot does not count. Members who cannot do the physical work can meet the same hours by handling sign-in, keeping the log, cooking for the fall dinner, or running the plant sale table. Hours are not carried over from one season to the next, and a member who ends a season far short of the hours is not offered a plot the next year.\n\nLast spring the roster had 58 names on it, counting plot holders, waiting-list volunteers, and the handful of neighbors who come for the company. That is more than we can use on a single work day, so the Program Coordinator posts a task list on the gate board on the Wednesday before each work day, and members sign up for a task rather than just showing up. A work day with a task list gets twice the work done in the same morning. Show up without signing up and you will be handed a rake, which is fine, but do not expect the job you wanted.\n\nEach row has a row captain, chosen from the plot holders on that row, who watches the row between work days, welcomes new gardeners, and speaks for the row at the fall meeting. Row captains are not police. They ask, they help, and they report to the Program Coordinator when asking and helping have not worked. A row captain who wants a break can hand the role to another plot holder on the row for the rest of the season with a note to the office.\n\nPlot Assignment Rules\n\nA full plot on the old lot is about 200 square feet, and a half plot is about 100 square feet. The old lot has 38 in-ground plots and 22 raised beds. The raised beds are reserved first for members who have trouble kneeling and second for the school program, and only then offered to the general list. The fee for the season is $48 for a full plot and $28 for a half plot, due with the plot agreement and not refundable after the first work day. Members who cannot pay the fee should talk to the Treasurer; nobody has ever been turned away over the fee, and nobody needs to explain why they are asking.\n\nRenewals are due by March 31. A plot not renewed by then goes to the waiting list, no exceptions, because the list is long and the people on it have been patient. As of this spring the waiting list has 37 names. The list is kept in the order people asked, with two exceptions: a member who lost a plot to lead testing goes to the top, and a household that already holds a plot goes to the bottom for a second one. No household holds more than two plots.\n\nA plot must be planted by mid-June and kept up through the season. Kept up means weeded, watered, and harvested; it does not mean tidy, and it does not mean pretty. A plot that goes untended for a month gets a note from the row captain, then a note from the office, and then, if nothing changes, it is turned over to the next name on the list. A member who knows they will be away for a stretch can arrange with the row captain for a neighbor to water and pick, and a plot with an arrangement on file is never turned over.\n\nPlots are numbered from the gate outward and marked with a stake at the path corner. Do not move stakes, and do not extend a plot into the path. Paths are shared and need to stay wide enough for a barrow. Anything growing across the path line on a work day gets trimmed by whoever is trimming paths, without a note.\n\nComposting\n\nThe garden composts in three bins along the back fence, each about a yard square and built from pallets. Bin one is for fresh material, bin two is cooking, and bin three is finished or nearly so. Only the tool captain and the compost captain move material between bins, so that a bin does not get restarted the week before it was ready.\n\nGreens and browns go in at roughly one part green to three parts brown by volume. Greens are plant trimmings, spent crops, coffee grounds from Miller's Bakery, and grass with no weed seed. Browns are dry leaves, straw, shredded cardboard, and the stalks from last season. No meat, no dairy, no cooked food, no pet waste, no diseased plants, no weeds that have gone to seed, and no bindweed at all, even the roots. A bin that is turned every second week and kept as damp as a wrung-out sponge will heat to about 140 degrees in the middle, and that heat is what kills the seeds and the pests we do not want back.\n\nFinished compost is screened through the half-inch sifter that hangs on the bin and used first on the raised beds and the front border, then offered to plots by the wheelbarrow. Members do not take compost home. The standard fill mix for a new raised bed on the old lot has been 40% compost and the rest screened topsoil, and we top up the beds each spring because the mix settles.\n\nMembers with plot waste that does not belong in the bins, mainly diseased tomato plants and seedy weeds, put it in the marked can by the shed, and it goes out with the city green waste. If the can is full, bag it and leave it beside the can, not in the compost.\n\nSeasonal Calendar\n\nThe season opens with the first work day of April, when the water is turned on, the tools are sharpened, the shed combination changes, and the plot stakes are checked against the assignment list. Members who have not signed a plot agreement by the opening work day do not have a plot yet, no matter what they were told in the winter.\n\nApril and May are for building. Paths are edged, raised beds are topped up, the front border is planted, and the compost bins are emptied of finished material. Cool crops go in as soon as the ground can be worked. The last frost usually lands in the third week of April, and warm crops wait until after it. The plant sale is the last Saturday of May, and it is the garden's largest single source of money outside plot fees.\n\nJune through August are for growing and for watering. Work days shift to path care, mulching, and the water line. The school program visits run from the second week of June until the school closes for the summer, and again in September. The Program Coordinator posts the visit calendar on the gate board so members know which mornings the raised beds by the gate will be busy.\n\nSeptember and October are for harvest and for the fall planting of garlic and cover crops. The fall meeting is the second Saturday of October, in the community center, and every plot holder is expected. The fall dinner follows at the end of October. Tickets are $23 and cover the meal for one; members who worked the kitchen eat free.\n\nNovember is for closing. Beds are cleared, cover crop is checked, hoses are drained and coiled, the water is shut off at the meter, tools are oiled, and the bins are given a final turn. The last work day is the Saturday before Thanksgiving. From then until April, the lot is closed except for the monthly walk-through by the Program Coordinator and the winter seed swap, which Miller's Bakery hosts on the last Saturday of February.\n\nSafety\n\nThe first-aid kit hangs inside the shed door and is checked and restocked every 60 days by the tool captain, with the date of the last check written on the tape on the lid. If you use anything from the kit, write it on the tape so it gets replaced. For anything beyond a scrape or a splinter, call emergency services first and the office second. The address of the lot and the nearest cross street are on the gate board and on the inside of the shed door.\n\nHeat is the risk we see most. When the heat index is above 95 degrees, work days end early or move to the following weekend, and no shared work is scheduled after midmorning. Drink before you are thirsty, work in the shade when there is any, and watch the person beside you, because the one who is overheating is usually the last to notice.\n\nLift nothing over 55 pounds alone. That is a full bag of fill or a full barrow of wet compost, and both are two-person jobs or many-trip jobs. Do not stand on the top two rungs of a ladder. Do not run the branch shredder without gloves and glasses, and never with a child within reach. Tetanus shots are the member's own business, but the office recommends being current.\n\nChildren are welcome on the lot with the adult who brought them, and that adult is responsible for them. School groups follow the youth group rules on the gate board: the visiting group brings its own adults, and garden volunteers are hosts, not supervisors. Young children stay out of the shed, off the compost bins, and away from the row spigots, which are not toys no matter how hot it is.\n\nDogs stay on a leash and off the beds. Smoking is not allowed on the lot. Glass of any kind stays out of the garden, because a broken jar in a bed is a hazard for years.\n\nWho To Ask\n\nQuestions about plots, the waiting list, and the work day task list go to the Program Coordinator, Maya Reyes, at m.reyes@riversidegarden.example. Questions about fees, reimbursements, and the plant sale money go to the Treasurer, Priya Nair, at p.nair@riversidegarden.example. Questions about the board, the lease, and the neighbors go to the Executive Director, Daniel Okonkwo, at d.okonkwo@riversidegarden.example. Anything urgent on the lot itself goes to the row captain first, then to whoever is in the office.\n"
+  },
+  {
+   "filename": "expansion-plan.txt",
+   "purpose": "Plain-text copy of expansion-plan.pdf, the one-page plan Maya attached to message 1. Carries her proposed total ($41,250, the one intentional thread-number match, required by the brief) and June start, the four asks, a grouped line-item budget that sums to $41,250 without repeating any figure Daniel quotes, a Site Layout section, and a short timeline. 2,302 characters.",
+   "text": "Riverside Community Garden\nExpansion Plan for the Adjacent Lot\nPrepared by Maya Reyes, Program Coordinator\n\nThe Lot Next Door\n\nThe lot next door has been offered to the garden on the same terms as the old lot. This plan puts it into use this season rather than holding it empty for a year. The first-season budget comes to $41,250, with work starting in June so the beds are filled and planted before the summer heat sets in.\n\nFour Asks\n\nFirst, approve the total budget below. Second, approve hiring Hollis Irrigation to run the water line from the meter to the far corner, with a spigot at the end of each row. Third, approve building the greenhouse this season; it is carried as its own line and can be removed without changing the rest of the plan. Fourth, approve starting the school program with Alder Hollow Elementary in the raised beds this season.\n\nProposed Budget\n\nWater line, spigots, fittings and backfill (Hollis Irrigation): $7,650\nGreenhouse, delivered, with gravel base: $10,300\nCedar raised beds and hardware: $4,900\nSoil, compost and delivery: $3,150\nTwo tool sheds (a kit on skids and a larger walk-in): $3,950\nFence and gate repair on the shared line: $1,850\nSchool program supplies and a weekend crew leader stipend: $3,650\nPermit, drawings, signs, hoses, hand tools and seed: $2,550\nContingency: $3,250\n\nThe greenhouse line is the vendor estimate plus delivery and the gravel base, and it is the only line that can come out on its own without changing the water line, the beds, or the sheds.\n\nSite Layout\n\nThe drawing on the back shows the gate on the street side, the in-ground plots in rows running back from the gate, the raised beds along the path nearest the gate, the two sheds on the back line, and the greenhouse in the far corner at the end of the water line. The plan calls for 32 in-ground plots and 20 raised beds in the first season, with room left along the fence for more beds later.\n\nTimeline\n\nJune: Hollis trenches and lays the water line; volunteers build and fill the raised beds behind the crew, and the first Alder Hollow Elementary visits follow once the beds are filled.\nJuly: Greenhouse base and frame go up; in-ground plots are tilled and staked.\nAugust: Both sheds built on a work day; Alder Hollow Elementary visits continue in the raised beds.\nSeptember: Fall planting across the new lot; season review with the board.\n"
+  },
+  {
+   "filename": "site-notes.txt",
+   "purpose": "Maya's first-person notes from walking the adjacent lot on a dry day in late April, before the proposal: dimensions, meter position, slope and likely wet spot, sun and shade, the east fence and its unknown ownership, the neighbor Ruth Alvarez, and a follow-up list. Leaves Daniel's open questions (rain walk, fence ownership) unanswered. 3,614 characters.",
+   "text": "Site Notes, Adjacent Lot\nMaya Reyes\nWalked the lot on Saturday morning, April 25. Dry day, no rain for most of a week.\n\nSize and Shape\n\nPaced it twice and checked with the long tape. The lot runs 118 feet along the street and 92 feet deep, close to a rectangle, a little narrower at the back. The street is on the south side, so the back line faces north. The old lot is across the alley to the west. The gate is on the street side toward the east end, and the opening is a hair under 9 feet, wide enough for a pickup but not for a dump truck with the box up. A delivery would have to dump at the curb, or we widen the gate.\n\nWater\n\nThe city meter is in the sidewalk strip, 39 feet west of the gate. There is a shutoff at the meter and nothing else on the lot: no spigot, no pipe, no sign of an old line. Any water we want has to come from the meter across the lot, and the longest run, to the far corner, is the whole depth plus most of the width.\n\nGround and Drainage\n\nThe ground drops about 17 inches from the gate to the back line, more on the west half than the east. I did not see standing water because it was dry, but the back of the west half has cracked mud, a strip of sedge, and darker soil than the rest, which is where I would expect water to sit after a storm. I need to come back after a hard rain to see for sure where it collects and how long it stays. The soil on the east half is lighter, with more sand, and it was warm to the touch by midmorning. There is an old poured pad near the back on the east side, cracked through, which would have to be broken up or built around. No obvious fill or trash, one pile of bricks by the pad, and a lot of bindweed near the street.\n\nSun\n\nMorning sun is open across the whole lot. By late afternoon the maple on the neighbor's side throws shade about 44 feet into the lot from the east line, so the east rows would lose the last of the day's sun in summer. The west half is open all day. Nothing shades the back line except the fence itself, which is low. If we put tall crops anywhere, the west half is the place; the east rows are better for greens and for anything that likes an afternoon break from the sun.\n\nFence\n\nThe east line has a board fence, six feet or so, weathered but mostly standing. There is a 43-foot stretch near the back where the boards are gone and only the posts stand. The north line has a low wire fence that leans toward us. The west line along the alley has no fence at all. I do not know who owns the east fence, whether it is ours, the neighbor's, or the city's, and the neighbor did not know either. Someone should check the plat before we spend anything on it.\n\nNeighbor\n\nThe neighbor to the east is Ruth Alvarez, who has lived in the house 33 years and was outside when I walked the line. She is glad the lot will be used and asked only that work not start before her grandson is awake on Saturdays. She warned me that her garage downspout empties onto our side of the fence about 61 feet back from the street, and that the ground there stays soft into May. She would like a say in what goes up along the fence, mainly that nothing tall blocks her kitchen window. I told her we would come back to talk before anything is built.\n\nThings To Follow Up\n\nWalk the lot after the next hard rain and mark where the water sits.\nCheck the plat for the east fence and the alley line.\nAsk the city whether the gate can be widened for deliveries.\nTake soil samples from both halves before we decide where the in-ground plots go.\nAsk Ruth for the best time to have a truck on the street.\n"
+  }
+ ],
+ "questions": [
+  {
+   "n": 1,
+   "category": "date_who",
+   "text": "what day did he reply to the proposal?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 7",
+     "7 May",
+     "2026-05-07",
+     "05-07",
+     "5/7",
+     "05/07",
+     "Thursday"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Daniel replied on Thursday, May 7, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 2,
+   "category": "date_who",
+   "text": "who replied to Maya's proposal, and when?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Daniel"
+   ],
+   "any": [
+    [
+     "May 7",
+     "7 May",
+     "2026-05-07",
+     "05-07"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Daniel Okonkwo, the Executive Director, replied on May 7, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 3,
+   "category": "date_who",
+   "text": "when was the proposal sent?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 4",
+     "4 May",
+     "2026-05-04",
+     "05-04",
+     "5/4",
+     "05/04",
+     "Monday"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Maya sent the proposal on Monday, May 4, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 4,
+   "category": "date_who",
+   "text": "when did Maya send her follow-up questions?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 8",
+     "8 May",
+     "2026-05-08",
+     "05-08",
+     "5/8",
+     "05/08",
+     "Friday"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Maya's follow-up with three questions was sent on Friday, May 8, 2026.",
+   "fact_ids": []
+  },
+  {
+   "n": 5,
+   "category": "date_who",
+   "text": "when was his last message in the thread, and what was it about?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 11",
+     "11 May",
+     "2026-05-11",
+     "05-11",
+     "5/11",
+     "Monday"
+    ],
+    [
+     "expansion account",
+     "quick answers",
+     "three questions",
+     "shed",
+     "east corner",
+     "half compost",
+     "between meetings",
+     "deposit"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Monday, May 11: his quick answers to Maya's three questions (deposit from the expansion account, compost limit only for in-ground plots, school start season left open) plus the shed moved to the east corner.",
+   "fact_ids": []
+  },
+  {
+   "n": 6,
+   "category": "summary",
+   "text": "summarize Daniel's reply",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Approves the expansion in principle with changes: cap lowered to $34,000; 24 plots and 14 cedar raised beds by the gate; compost max 35%; Hollis water line at $6,900 with a $1,600 deposit; small shed on skids yes, second shed no; greenhouse deferred until the permit; $475 city permit via Lena Whitfield; no paid crew leader; bakery pledge $3,200 plus 27% of June loaves; Alder Hollow program only with a signed principal's letter; three deadlines (May 15, 21, 29) and a meeting May 19 at 6:30 p.m.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F08",
+    "F09",
+    "F10",
+    "F12",
+    "F16",
+    "F17",
+    "F21",
+    "F23",
+    "F24",
+    "F33"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "shed"
+    ],
+    [
+     "24",
+     "14"
+    ],
+    [
+     "35%",
+     "compost"
+    ],
+    [
+     "Hollis",
+     "water line",
+     "$6,900",
+     "6,900"
+    ],
+    [
+     "permit",
+     "$475",
+     "Lena"
+    ],
+    [
+     "May 19",
+     "6:30",
+     "Tuesday"
+    ],
+    [
+     "Miller",
+     "Bakery",
+     "bakery",
+     "$3,200",
+     "27%"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 7,
+   "category": "summary",
+   "text": "what did he say in general about the plan?",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "He approves the expansion in principle but not as proposed: the cap drops to $34,000, the greenhouse waits for the permit, the second shed and the paid crew leader are rejected, the water line is the priority, the two-season rule applies to anything permanent, the bakery pledge sits outside the cap, the school program needs a signed letter, and he wants a revised budget, the Hollis contract, and the layout by May 15, 21, and 29.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F07",
+    "F16",
+    "F17",
+    "F23",
+    "F27",
+    "F28",
+    "F29",
+    "F30"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000",
+     "lowering",
+     "lowered",
+     "lower the cap"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "shed"
+    ],
+    [
+     "Hollis",
+     "water line"
+    ],
+    [
+     "permit",
+     "Lena",
+     "$475",
+     "city permit"
+    ],
+    [
+     "Miller",
+     "Bakery",
+     "bakery",
+     "$3,200",
+     "27%"
+    ],
+    [
+     "two-season",
+     "two season",
+     "permanent"
+    ],
+    [
+     "May 15",
+     "May 21",
+     "May 29",
+     "deadline"
+    ],
+    [
+     "Alder Hollow",
+     "school",
+     "crew leader"
+    ],
+    [
+     "turning down",
+     "couple of things",
+     "two of the items",
+     "not approving the total",
+     "turned down"
+    ],
+    [
+     "not ready to decide",
+     "holding",
+     "couple more",
+     "until we know more",
+     "defer"
+    ],
+    [
+     "revised plan",
+     "revised"
+    ],
+    [
+     "good work",
+     "we are doing this",
+     "pace and money"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 8,
+   "category": "summary",
+   "text": "what are the main points of his May 7 email?",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Approval in principle with changes; cap $34,000; 24 plots and 14 raised beds; Hollis water line $6,900 with $1,600 deposit; shed yes, second shed no; greenhouse deferred; permit $475 through Lena Whitfield; no paid crew leader; bakery $3,200 and 27%; Alder Hollow needs a signed letter; deadlines May 15, 21, 29; meeting May 19 at 6:30 p.m.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F08",
+    "F09",
+    "F12",
+    "F16",
+    "F17",
+    "F21",
+    "F24",
+    "F27",
+    "F33"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "shed"
+    ],
+    [
+     "24",
+     "14"
+    ],
+    [
+     "Hollis",
+     "water line",
+     "$6,900",
+     "6,900"
+    ],
+    [
+     "permit",
+     "$475",
+     "Lena"
+    ],
+    [
+     "May 19",
+     "6:30",
+     "Tuesday"
+    ],
+    [
+     "Miller",
+     "Bakery",
+     "bakery",
+     "$3,200",
+     "27%"
+    ],
+    [
+     "Alder Hollow",
+     "school",
+     "signed letter"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 9,
+   "category": "summary",
+   "text": "give me an overview of where things stand after the whole thread",
+   "flags": "",
+   "type": "summary",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Expansion approved in principle under a $34,000 cap; greenhouse deferred until the permit; Hollis water line approved with a $1,600 deposit paid from the expansion account; compost limit applies to in-ground plots only (raised beds may be half compost); shed moved to the east corner by the gate because the north line is in the setback; Alder Hollow start season still open until Daniel meets the principal; meeting May 19 at 6:30 p.m.",
+   "fact_ids": [
+    "F04",
+    "F05",
+    "F17",
+    "F13",
+    "F21",
+    "F33",
+    "F35",
+    "F36",
+    "F37",
+    "F38"
+   ],
+   "facts": [
+    [
+     "in principle",
+     "with changes",
+     "approv"
+    ],
+    [
+     "$34,000",
+     "34,000"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "Hollis",
+     "water line",
+     "$6,900",
+     "6,900",
+     "$1,600",
+     "1,600"
+    ],
+    [
+     "permit",
+     "$475",
+     "Lena"
+    ],
+    [
+     "May 19",
+     "6:30",
+     "Tuesday"
+    ],
+    [
+     "expansion account"
+    ],
+    [
+     "east corner",
+     "setback",
+     "corner by the gate"
+    ],
+    [
+     "half compost",
+     "up to half",
+     "in-ground plots only",
+     "only to the in-ground",
+     "applies only"
+    ],
+    [
+     "principal",
+     "Alder Hollow",
+     "school"
+    ]
+   ],
+   "min_facts": 5
+  },
+  {
+   "n": 10,
+   "category": "specific_fact",
+   "text": "what budget cap did he set?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$34,000"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Daniel lowered the cap to $34,000 (from Maya's proposed $41,250).",
+   "fact_ids": [
+    "F05",
+    "F02"
+   ]
+  },
+  {
+   "n": 11,
+   "category": "specific_fact",
+   "text": "what's the max compost share he'll allow in the fill mix?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "35%"
+   ],
+   "any": [],
+   "must_not": [
+    "27%",
+    "40%"
+   ],
+   "cite": "thread.eml",
+   "expected": "No more than 35% compost for the in-ground plots, the rest screened topsoil; in his May 11 reply he adds that raised beds may go up to half compost.",
+   "fact_ids": [
+    "F10"
+   ]
+  },
+  {
+   "n": 12,
+   "category": "specific_fact",
+   "text": "what percent of each garden loaf will Miller's Bakery give us?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "27%"
+   ],
+   "any": [],
+   "must_not": [
+    "35%"
+   ],
+   "cite": "thread.eml",
+   "expected": "27% of the price of every garden loaf sold in June.",
+   "fact_ids": [
+    "F25"
+   ]
+  },
+  {
+   "n": 13,
+   "category": "specific_fact",
+   "text": "how many in-ground plots did he approve?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "24"
+   ],
+   "any": [],
+   "must_not": [
+    "46",
+    "32 in-ground",
+    "32 plots",
+    "38 in-ground",
+    "38 plots"
+   ],
+   "cite": "thread.eml",
+   "expected": "24 in-ground plots.",
+   "fact_ids": [
+    "F08"
+   ]
+  },
+  {
+   "n": 14,
+   "category": "specific_fact",
+   "text": "how many raised beds did he approve, and where do they go?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "14"
+   ],
+   "any": [
+    [
+     "gate"
+    ]
+   ],
+   "must_not": [
+    "46",
+    "22 raised",
+    "20 raised",
+    "140"
+   ],
+   "cite": "thread.eml",
+   "expected": "14 cedar raised beds, placed nearest the gate.",
+   "fact_ids": [
+    "F09"
+   ]
+  },
+  {
+   "n": 15,
+   "category": "specific_fact",
+   "text": "how many active volunteers are on the spring roster?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "46"
+   ],
+   "any": [],
+   "must_not": [
+    "58"
+   ],
+   "cite": "thread.eml",
+   "expected": "46 active volunteers.",
+   "fact_ids": [
+    "F22"
+   ]
+  },
+  {
+   "n": 16,
+   "category": "specific_fact",
+   "text": "when can Hollis do the trenching?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "June 16",
+    "July 10"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Hollis can trench from June 16 to July 10.",
+   "fact_ids": [
+    "F14"
+   ]
+  },
+  {
+   "n": 17,
+   "category": "specific_fact",
+   "text": "who's our contact at the city for the permit?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Lena Whitfield"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Lena Whitfield, the permits clerk at the city building office.",
+   "fact_ids": [
+    "F20"
+   ]
+  },
+  {
+   "n": 18,
+   "category": "specific_fact",
+   "text": "how much is the city permit fee?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$475"
+   ],
+   "any": [],
+   "must_not": [
+    "$34,000",
+    "$41,250",
+    "$1,600",
+    "$1,380",
+    "$2,850",
+    "$3,200"
+   ],
+   "cite": "thread.eml",
+   "expected": "$475, paid to the city when the full application is filed, and not refunded if the permit is denied.",
+   "fact_ids": [
+    "F21"
+   ]
+  },
+  {
+   "n": 19,
+   "category": "specific_fact",
+   "text": "what deposit does Hollis want before they schedule the trench?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$1,600"
+   ],
+   "any": [],
+   "must_not": [
+    "$475",
+    "$1,380"
+   ],
+   "cite": "thread.eml",
+   "expected": "A $1,600 deposit, which Daniel approved; the balance is due only after the city inspector signs off on the open trench.",
+   "fact_ids": [
+    "F13"
+   ]
+  },
+  {
+   "n": 20,
+   "category": "specific_fact",
+   "text": "when and where is the meeting?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "6:30"
+   ],
+   "any": [
+    [
+     "May 19",
+     "19 May",
+     "2026-05-19",
+     "05-19"
+    ],
+    [
+     "garden office",
+     "office"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Tuesday, May 19 at 6:30 p.m. in the garden office.",
+   "fact_ids": [
+    "F33"
+   ]
+  },
+  {
+   "n": 21,
+   "category": "specific_fact",
+   "text": "how much did the bakery pledge?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$3,200"
+   ],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Miller's Bakery pledged $3,200 toward the expansion (plus 27% of June garden loaf sales).",
+   "fact_ids": [
+    "F24"
+   ]
+  },
+  {
+   "n": 22,
+   "category": "decision",
+   "text": "what did he reject, and why?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "shed",
+    "crew leader"
+   ],
+   "any": [
+    [
+     "storage",
+     "short walk",
+     "do not own",
+     "don't own"
+    ],
+    [
+     "every other volunteer",
+     "changes how",
+     "cannot easily stop",
+     "can't easily stop",
+     "no room",
+     "under the cap"
+    ]
+   ],
+   "must_not": [
+    "rejected the greenhouse",
+    "rejects the greenhouse",
+    "rejecting the greenhouse",
+    "turned down the greenhouse",
+    "greenhouse was rejected"
+   ],
+   "cite": "thread.eml",
+   "expected": "The second, larger shed (the old shed is a short walk away and it would pay for storage of things they do not own) and the paid weekend crew leader (paying one volunteer changes how every other volunteer sees the work, it cannot easily be stopped, and there is no room under the cap).",
+   "fact_ids": [
+    "F16",
+    "F23"
+   ]
+  },
+  {
+   "n": 23,
+   "category": "decision",
+   "text": "what is he holding off on, and what is he waiting for before he decides?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "greenhouse"
+   ],
+   "any": [
+    [
+     "permit"
+    ],
+    [
+     "bakery sign",
+     "bakery's sign",
+     "sign with the bakery",
+     "sign for the bakery",
+     "sign with",
+     "sign at the street",
+     "bakery's name",
+     "name on it",
+     "question of a sign"
+    ],
+    [
+     "Priya",
+     "partnership letter"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The greenhouse (he will decide after the permit comes back from the city) and a sign with the bakery's name (he will decide after Priya reviews the partnership letter).",
+   "fact_ids": [
+    "F17",
+    "F26"
+   ]
+  },
+  {
+   "n": 24,
+   "category": "decision",
+   "text": "which program did he approve only on a condition, and what's the condition?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "Alder Hollow"
+   ],
+   "any": [
+    [
+     "letter"
+    ],
+    [
+     "principal"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The Alder Hollow Elementary school program, provided the school sends a signed letter from its principal naming the supervising adults and confirming visits end before the afternoon heat.",
+   "fact_ids": [
+    "F27"
+   ]
+  },
+  {
+   "n": 25,
+   "category": "decision",
+   "text": "did he approve the greenhouse?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "defer",
+     "not yet",
+     "after the permit",
+     "hold",
+     "wait",
+     "postpon",
+     "not this season",
+     "next year",
+     "later",
+     "put off",
+     "no, not",
+     "No, not",
+     "not approv",
+     "did not approve"
+    ]
+   ],
+   "must_not": [
+    "Yes, he approved",
+    "yes, he approved",
+    "Yes, Daniel approved",
+    "approved the greenhouse this season"
+   ],
+   "cite": "thread.eml",
+   "expected": "Not this season; he deferred it and will decide after the permit comes back. The $9,750 stays in the plan as a line for next year, above the cap.",
+   "fact_ids": [
+    "F17",
+    "F19"
+   ]
+  },
+  {
+   "n": 26,
+   "category": "decision",
+   "text": "did he say yes to the second shed?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "no,",
+     "no.",
+     "No,",
+     "No.",
+     "not approv",
+     "reject",
+     "no to",
+     "No to",
+     "turned down",
+     "did not approve",
+     "does not approve",
+     "said no",
+     "declin",
+     "only one shed",
+     "one shed",
+     "did not say yes",
+     "didn't say yes",
+     "only the smaller",
+     "smaller shed",
+     "larger one",
+     "not the second",
+     "not to the second"
+    ]
+   ],
+   "must_not": [
+    "yes to the second shed",
+    "approved the second shed",
+    "approved both sheds"
+   ],
+   "cite": "thread.eml",
+   "expected": "No. He approved only one shed on skids at $1,380 and rejected the second, larger shed.",
+   "fact_ids": [
+    "F16",
+    "F15"
+   ]
+  },
+  {
+   "n": 27,
+   "category": "decision",
+   "text": "why did he say no to the paid weekend crew leader?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "every other volunteer",
+     "how every other",
+     "changes how",
+     "cannot easily stop",
+     "can't easily stop",
+     "no room",
+     "under the cap"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Paying one volunteer changes how every other volunteer sees the work, once started it cannot easily stop, and there is no room for it under the cap; he would rather rotate row captains.",
+   "fact_ids": [
+    "F23"
+   ]
+  },
+  {
+   "n": 28,
+   "category": "request_deadline",
+   "text": "what does he want me to do and by when?",
+   "flags": "",
+   "type": "list",
+   "must": [],
+   "any": [
+    [
+     "May 15",
+     "15 May",
+     "05-15"
+    ],
+    [
+     "May 21",
+     "21 May",
+     "05-21"
+    ],
+    [
+     "May 29",
+     "29 May",
+     "05-29"
+    ],
+    [
+     "budget"
+    ],
+    [
+     "contract",
+     "Hollis"
+    ],
+    [
+     "layout",
+     "captain"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Revised one-page budget at or under the cap by Friday, May 15; Hollis contract with the deposit and inspection clause by Thursday, May 21; plot layout and row captain list by Friday, May 29.",
+   "fact_ids": [
+    "F28",
+    "F29",
+    "F30"
+   ]
+  },
+  {
+   "n": 29,
+   "category": "request_deadline",
+   "text": "list the three things he asked me to send him, each with its due date",
+   "flags": "",
+   "type": "list",
+   "must": [],
+   "any": [
+    [
+     "May 15",
+     "15 May",
+     "05-15"
+    ],
+    [
+     "May 21",
+     "21 May",
+     "05-21"
+    ],
+    [
+     "May 29",
+     "29 May",
+     "05-29"
+    ],
+    [
+     "budget"
+    ],
+    [
+     "contract",
+     "Hollis"
+    ],
+    [
+     "layout",
+     "captain"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "1. Revised budget, May 15. 2. Hollis contract with deposit and inspection clause, May 21. 3. Plot layout and row captain list, May 29.",
+   "fact_ids": [
+    "F28",
+    "F29",
+    "F30"
+   ]
+  },
+  {
+   "n": 30,
+   "category": "request_deadline",
+   "text": "when does he need the revised budget, and what should it look like?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 15",
+     "15 May",
+     "05-15"
+    ],
+    [
+     "under the cap",
+     "under the new cap",
+     "at or under",
+     "line items",
+     "same line",
+     "side by side",
+     "compare",
+     "$34,000",
+     "34,000",
+     "one-page",
+     "one page"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "By Friday, May 15: a one-page budget at or under the $34,000 cap, keeping the same line items so Priya can compare side by side.",
+   "fact_ids": [
+    "F28"
+   ]
+  },
+  {
+   "n": 31,
+   "category": "request_deadline",
+   "text": "by when does he want the Hollis contract, and what has to be written into it?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "May 21",
+     "21 May",
+     "05-21"
+    ],
+    [
+     "inspection",
+     "deposit"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "By Thursday, May 21, with the $1,600 deposit and the inspection clause (balance due only after the city inspector signs off) written in.",
+   "fact_ids": [
+    "F29"
+   ]
+  },
+  {
+   "n": 32,
+   "category": "absence",
+   "text": "does he say anything about parking?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 33,
+   "category": "absence",
+   "text": "what did he decide about insurance for the new lot?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 34,
+   "category": "absence",
+   "text": "did they discuss solar panels for the greenhouse?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 35,
+   "category": "absence",
+   "text": "what did Priya reply?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [
+    [
+     "did not write",
+     "didn't write",
+     "did not reply",
+     "didn't reply",
+     "did not send",
+     "didn't send",
+     "did not respond",
+     "didn't respond",
+     "no message",
+     "no reply",
+     "no response",
+     "never wrote",
+     "never replied",
+     "never sent",
+     "never responded",
+     "not specified",
+     "not reply",
+     "not write",
+     "not respond",
+     "only cc",
+     "only copied",
+     "cc'd",
+     "cc'ed",
+     "copied on",
+     "wrote nothing",
+     "not contain",
+     "no email",
+     "does not include",
+     "doesn't include",
+     "not appear",
+     "nothing from Priya",
+     "no messages from",
+     "cannot answer",
+     "can't answer",
+     "not able to",
+     "unable to",
+     "not found",
+     "cannot find",
+     "can't find",
+     "no information",
+     "not enough information",
+     "not in the"
+    ]
+   ],
+   "must_not": [
+    "Priya replied that",
+    "Priya wrote that",
+    "Priya's reply",
+    "Priya responded that",
+    "Priya sent a"
+   ],
+   "cite": "thread.eml",
+   "expected": "Priya did not write any message in the thread; she was only cc'd on Daniel's May 7 reply. Daniel reports her view secondhand.",
+   "fact_ids": []
+  },
+  {
+   "n": 36,
+   "category": "attribution",
+   "text": "what did Maya ask in her follow-up?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "deposit"
+   ],
+   "any": [
+    [
+     "expansion account",
+     "general account",
+     "which account",
+     "account"
+    ],
+    [
+     "compost",
+     "raised beds",
+     "35%"
+    ],
+    [
+     "Alder Hollow",
+     "June",
+     "fall",
+     "school",
+     "start"
+    ]
+   ],
+   "must_not": [
+    "wheelchair",
+    "fence"
+   ],
+   "cite": "thread.eml",
+   "expected": "1. Should the $1,600 Hollis deposit come from the general account or the expansion account? 2. Does the 35% compost limit apply to raised beds too? 3. Should the Alder Hollow program start in June or wait until fall?",
+   "fact_ids": [
+    "F34"
+   ]
+  },
+  {
+   "n": 37,
+   "category": "attribution",
+   "text": "what did Daniel answer in his second reply?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "expansion account"
+   ],
+   "any": [
+    [
+     "half",
+     "in-ground",
+     "raised beds"
+    ],
+    [
+     "principal",
+     "wait",
+     "walk"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Deposit comes from the expansion account (Priya writes the check when the countersigned contract arrives); the compost limit applies only to in-ground plots, raised beds can be up to half compost; the program start stays open until he walks the lot with the Alder Hollow principal; and the shed moves to the east corner by the gate because the north line is in the setback.",
+   "fact_ids": [
+    "F35",
+    "F36",
+    "F37",
+    "F38"
+   ]
+  },
+  {
+   "n": 38,
+   "category": "attribution",
+   "text": "which of Maya's three questions did he not really answer?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "third",
+     "Alder Hollow",
+     "school program",
+     "program start",
+     "start season",
+     "June or fall",
+     "when to start",
+     "start in June",
+     "hold it until",
+     "start the program",
+     "program's start",
+     "when the program"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The third one, whether the Alder Hollow program starts in June or the fall; he deferred it until he has walked the lot with the principal.",
+   "fact_ids": [
+    "F37"
+   ]
+  },
+  {
+   "n": 39,
+   "category": "attribution",
+   "text": "list the items Daniel deferred in his May 7 reply",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "greenhouse"
+   ],
+   "any": [
+    [
+     "bakery sign",
+     "bakery's sign",
+     "sign with the bakery",
+     "sign for the bakery",
+     "sign with",
+     "sign at the street",
+     "bakery's name",
+     "name on it",
+     "question of a sign"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "1. The greenhouse (decide after the permit comes back). 2. The sign with the bakery's name (decide after Priya reviews the partnership letter).",
+   "fact_ids": [
+    "F17",
+    "F26"
+   ]
+  },
+  {
+   "n": 40,
+   "category": "clarification",
+   "text": "what does he mean by 'the two-season rule'?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "permanent"
+   ],
+   "any": [
+    [
+     "two full seasons",
+     "two seasons",
+     "one spring and one fall",
+     "spring and one fall",
+     "spring and a fall"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "Nothing permanent (anything with a footing, pad, or foundation that cannot be moved by truck and volunteers) gets built on the new lot until it has been gardened through two full seasons, one spring and one fall.",
+   "fact_ids": [
+    "F07"
+   ]
+  },
+  {
+   "n": 41,
+   "category": "clarification",
+   "text": "what does Priya think about the plan?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "water line"
+   ],
+   "any": [
+    [
+     "cut"
+    ]
+   ],
+   "must_not": [
+    "Priya replied that",
+    "Priya wrote that",
+    "Priya's reply",
+    "Priya's email"
+   ],
+   "cite": "thread.eml",
+   "expected": "As Daniel reports it: the water line is the one item that cannot be cut, and the bakery money is a pledge, not cash in the bank, so the cap does not assume it.",
+   "fact_ids": [
+    "F06"
+   ]
+  },
+  {
+   "n": 42,
+   "category": "change",
+   "text": "what did he change between his first reply and his second one?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "shed"
+   ],
+   "any": [
+    [
+     "east corner",
+     "by the gate",
+     "gate"
+    ],
+    [
+     "setback",
+     "north"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The shed location: he first said the north fence, then moved it to the east corner by the gate because Lena said the north line is inside the city's setback.",
+   "fact_ids": [
+    "F38"
+   ]
+  },
+  {
+   "n": 43,
+   "category": "change",
+   "text": "what budget number did he change from Maya's plan, and to what?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$34,000"
+   ],
+   "any": [
+    [
+     "$41,250",
+     "41,250"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The total budget: Maya proposed $41,250 and he lowered the cap to $34,000.",
+   "fact_ids": [
+    "F02",
+    "F05"
+   ]
+  },
+  {
+   "n": 44,
+   "category": "trap",
+   "text": "what does his reply say the soil delivery will cost?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "$2,850"
+   ],
+   "any": [],
+   "must_not": [
+    "$3,150"
+   ],
+   "cite": "thread.eml",
+   "expected": "$2,850, the quote from last year's yard, delivered and dumped in one load.",
+   "fact_ids": [
+    "F11"
+   ]
+  },
+  {
+   "n": 45,
+   "category": "trap",
+   "text": "what dimensions does he give for each in-ground plot?",
+   "flags": "",
+   "type": "refuse",
+   "must": [],
+   "any": [],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 46,
+   "category": "clarification",
+   "text": "what did he mean by 'the cap is a ceiling, not a target'?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "general fund"
+   ],
+   "any": [
+    [
+     "under",
+     "difference",
+     "savings",
+     "extras",
+     "not a target"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "If the water line and beds come in under the cap, the difference stays in the general fund; it is not spent on extras.",
+   "fact_ids": []
+  },
+  {
+   "n": 47,
+   "category": "clarification",
+   "text": "what did he mean when he said the bakery money is a pledge, not cash in the bank?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "pledge"
+   ],
+   "any": [
+    [
+     "does not assume",
+     "not assume",
+     "cap does not",
+     "when it arrives",
+     "addition to the cap",
+     "not part of it",
+     "arrives",
+     "not counted"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The pledge is not counted inside the $34,000 cap; it is treated as an addition when it arrives.",
+   "fact_ids": []
+  },
+  {
+   "n": 48,
+   "category": "request_deadline",
+   "text": "what questions did he ask me?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "fence",
+    "wheelchair"
+   ],
+   "any": [
+    [
+     "Alder Hollow",
+     "contact"
+    ],
+    [
+     "rain",
+     "water sits",
+     "heavy rain"
+    ]
+   ],
+   "must_not": [
+    "expansion account",
+    "general account",
+    "June or",
+    "until the fall"
+   ],
+   "cite": "thread.eml",
+   "expected": "Four: fence ownership on the east line; how many beds at wheelchair height; the Alder Hollow contact and whether they saw the lot; whether anyone walked the lot after heavy rain.",
+   "fact_ids": []
+  },
+  {
+   "n": 49,
+   "category": "decision",
+   "text": "did he say yes to hiring Hollis?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "yes",
+     "approv",
+     "take it",
+     "take the quote",
+     "take that quote",
+     "go ahead",
+     "fair",
+     "want to take"
+    ],
+    [
+     "$1,600",
+     "1,600",
+     "deposit",
+     "inspect"
+    ]
+   ],
+   "must_not": [
+    "$7,650",
+    "no, he",
+    "No, he",
+    "did not approve"
+   ],
+   "cite": "thread.eml",
+   "expected": "Yes: he approves the $6,900 Hollis quote and the $1,600 deposit; the balance only after the city inspection sign-off, written into the contract.",
+   "fact_ids": []
+  }
+ ]
+}

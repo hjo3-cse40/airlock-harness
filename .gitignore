@@ -13,3 +13,5 @@ matters/format-probe/docs/firm-yankee/engagement.docx
 matters/format-probe/docs/firm-xray/terms.docx
 matters/format-probe/docs/firm-uniform/notes.docx
 matters/*/audit/chat-history.txt
+# thread-probe: the index is rebuilt by ingest; the padded .eml is not committed either
+matters/thread-probe/index.json

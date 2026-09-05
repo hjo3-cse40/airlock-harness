@@ -1245,17 +1245,21 @@ def dates_named(question, chunks):
 
 ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4,
             "last": -1, "latest": -1, "final": -1, "most recent": -1, "newest": -1, "earliest": 1, "original": 1}
-ORDINAL_RE = re.compile(r"(?i)\b(" + "|".join(re.escape(k) for k in sorted(ORDINALS, key=len, reverse=True))
-                        + r")\s+(?:reply|replies|email|e-mail|message|note|mail|response|answer)\b")
+_ORD_WORDS = "|".join(re.escape(k) for k in sorted(ORDINALS, key=len, reverse=True))
+ORDINAL_RE = re.compile(r"(?i)\b(" + _ORD_WORDS + r")\s+(?:reply|replies|email|e-mail|message|note|mail|response|answer|one)\b")
+ORDINAL_PAIR_RE = re.compile(r"(?i)\b(" + _ORD_WORDS + r")\s*(?:,|and|or|to|vs\.?|versus|&)\s+(?:his |her |their |the )?(" + _ORD_WORDS + r")\b")
 
 def ordinals_named(question):
     """[1] for 'his first reply', [-1] for 'the latest email', [] when none or several
-    ('between his first and second reply' compares, it does not narrow)."""
+    ('between his first and second reply', 'first reply and his second one' compare,
+    they do not narrow)."""
     found = []
     for m in ORDINAL_RE.finditer(question):
         n = ORDINALS[m.group(1).lower()]
         if n not in found:
             found.append(n)
+    if ORDINAL_PAIR_RE.search(question):
+        return []
     return found if len(found) == 1 else []
 
 def is_broad(question):
@@ -1311,7 +1315,7 @@ def gather_hits(chunks, body, budget=GATHER_MAX_CHUNKS):
         body = [c for c in body if c["id"] in keep]
     return ov + body, dropped
 
-READ_MAX_CHUNKS = 24      # a targeted person's messages this small are READ whole for any question about them
+READ_MAX_CHUNKS = 32      # targeted messages this small (about 8k tokens) are READ whole for any question about them
 
 def plan_read(question, chunks, target):
     """Decide whether a question is answered by reading messages whole instead of
@@ -3580,10 +3584,13 @@ def selftest(min_score):
     t8 = email_targets("what did he answer in his second reply?", ch)
     t9 = email_targets("what did she say in her latest email?", ch)
     t10 = email_targets("what changed between his first reply and his second reply?", ch)
+    t11 = email_targets("what did he change between his first reply and his second one?", ch)
+    t12 = email_targets("compare his first and second reply", ch)
     check("eml targets: an ordinal picks that sender's n-th message; two ordinals compare and do not narrow",
           t8["ordinal"] == [2] and all(email_meta(c).get("n") == 4 for c in target_chunks(ch, t8))
           and t9["ordinal"] == [-1] and all(email_meta(c).get("n") == 4 for c in target_chunks(ch, t9))
-          and t10["ordinal"] == [] and {email_meta(c).get("n") for c in target_chunks(ch, t10)} == {2, 4})
+          and t10["ordinal"] == [] and {email_meta(c).get("n") for c in target_chunks(ch, t10)} == {2, 4}
+          and t11["ordinal"] == [] and t12["ordinal"] == [])
     rd, _, note = plan_read("what did he reject?", ch, email_targets("what did he reject?", ch))
     check("eml read: a question about a person whose messages fit the read budget reads them whole",
           rd and email_meta(rd[0]).get("overview") and all(email_meta(c).get("from") == "Daniel Okonkwo" for c in rd[1:])

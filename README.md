@@ -229,7 +229,7 @@ the routing (`email_target`, `gathered`):
   you under `me`; with several counterparties it means nobody and the question runs
   as a plain search. A date ("his May 7 email", "on 5/11") or an ordinal ("her
   second reply", "the latest message") narrows it to that message.
-- When the targeted messages are small enough (24 chunks, about 6k tokens) they are
+- When the targeted messages are small enough (32 chunks, about 8k tokens) they are
   READ whole, in order, after the overview: a question about a person is answered
   from everything that person wrote, so "what did he reject" works even though the
   reply says "I am not approving" and never "reject". The sources line says
@@ -328,6 +328,16 @@ boundary: not retrieval, not the index, not the audit log, not the history.
   with `ANSWER-KEY.md`. Run it with `batch` and score by hand against the key.
 - `matters/format-probe/test-questions.txt` asks one question per document
   format, with its own answer key, and one trap that must be refused.
+- `matters/thread-probe/` is a self-forwarded email chain whose second message
+  is a 12k-character reply from a director (a fictional community-garden
+  expansion), beside three look-alike documents. Its 49 questions are phrased
+  the way a person types them ("what day did he reply", "summarize his reply",
+  "what does he want me to do and by when", "what did he mean by ..."), with
+  refusal traps and matched list-framed / prose-framed pairs. Build it with
+  `make_thread_probe.py` (`--pad 580000` pads the attachments to a realistic
+  file size, `--variants DIR` writes the same chain in six quoting styles), run
+  `batch test-questions.txt`, then score deterministically with
+  `python3 eval_thread_probe.py matters/thread-probe/answer-key.json matters/thread-probe/audit/<machine>.jsonl test-questions.txt --corpus-dir matters/thread-probe/docs`.
 - Test tooling also includes a needle-in-a-haystack generator, a
   prompt-injection probe, a refusal-precision probe, and the summarization
   faithfulness eval (`eval_summary.py`).

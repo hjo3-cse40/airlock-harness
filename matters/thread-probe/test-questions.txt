@@ -1,9 +1,9 @@
-# draft
+# thread-probe: a self-forwarded chain whose second message is a long reply. Key in ANSWER-KEY.md
 what day did he reply to the proposal?
 who replied to Maya's proposal, and when?
 when was the proposal sent?
 when did Maya send her follow-up questions?
-when was the last message in the thread, and who sent it?
+when was his last message in the thread, and what was it about?
 summarize Daniel's reply
 what did he say in general about the plan?
 what are the main points of his May 7 email?
@@ -22,7 +22,7 @@ when and where is the meeting?
 how much did the bakery pledge?
 what did he reject, and why?
 what is he holding off on, and what is he waiting for before he decides?
-what did he approve only on a condition, and what's the condition?
+which program did he approve only on a condition, and what's the condition?
 did he approve the greenhouse?
 did he say yes to the second shed?
 why did he say no to the paid weekend crew leader?
@@ -41,6 +41,10 @@ list the items Daniel deferred in his May 7 reply
 what does he mean by 'the two-season rule'?
 what does Priya think about the plan?
 what did he change between his first reply and his second one?
-what number did he change from Maya's plan?
+what budget number did he change from Maya's plan, and to what?
 what does his reply say the soil delivery will cost?
 what dimensions does he give for each in-ground plot?
+what did he mean by 'the cap is a ceiling, not a target'?
+what did he mean when he said the bakery money is a pledge, not cash in the bank?
+what questions did he ask me?
+did he say yes to hiring Hollis?

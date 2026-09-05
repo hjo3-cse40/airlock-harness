@@ -11,7 +11,9 @@ import json, re, sys, os, glob
 
 REFUSAL_PATTERNS = ("not in the documents", "not specified in the sources", "not specified in the source",
                     "no information", "does not specify", "do not specify", "is not mentioned", "not mentioned",
-                    "not stated", "not addressed", "did not write", "did not reply", "did not send", "no message from")
+                    "no mention", "not stated", "not addressed", "not discussed", "not found", "nothing about",
+                    "does not mention", "do not mention", "did not write", "did not reply", "did not send",
+                    "no message from", "no reply from", "not contain", "does not include", "no record")
 
 def norm(s):
     s = (s or "").lower().replace("’", "'").replace("“", '"').replace("”", '"')
@@ -99,16 +101,22 @@ def main():
             hit = [g for g in groups if any(present(t, a) for t in g)]
             need = q.get("min_facts") or max(1, len(groups) // 2)
             bad = [t for t in q.get("must_not") or [] if present(t, a)]
-            ok = (not refused) and len(hit) >= need and not bad
+            # a hedged answer ("no direct statement, but ...") that carries the facts still passes;
+            # only a bare refusal fails
+            ok = len(hit) >= need and not bad and not (refused and not hit)
             why.append(f"facts {len(hit)}/{len(groups)} (need {need})")
-            if refused: why.append("REFUSED a summary question")
+            if refused and not hit: why.append("REFUSED a summary question")
+            elif refused: why.append("hedged")
             if bad: why.append(f"must_not present: {bad}")
         else:
             miss = [t for t in q.get("must") or [] if not present(t, a)]
             miss_any = [g for g in q.get("any") or [] if not any(present(t, a) for t in g)]
             bad = [t for t in q.get("must_not") or [] if present(t, a)]
-            ok = (not refused) and not miss and not miss_any and not bad
-            if refused: why.append("REFUSED")
+            has_required = bool((q.get("must") or []) or (q.get("any") or []))
+            bare_refusal = refused and (not has_required or miss or miss_any)
+            ok = not miss and not miss_any and not bad and not bare_refusal
+            if bare_refusal: why.append("REFUSED")
+            elif refused: why.append("hedged")
             if miss: why.append(f"missing must: {miss}")
             if miss_any: why.append(f"missing any-group: {miss_any}")
             if bad: why.append(f"must_not present: {bad}")

@@ -12,7 +12,10 @@
      "May 7",
      "7 May",
      "2026-05-07",
-     "05-07"
+     "05-07",
+     "5/7",
+     "05/07",
+     "Thursday"
     ]
    ],
    "must_not": [],
@@ -54,7 +57,10 @@
      "May 4",
      "4 May",
      "2026-05-04",
-     "05-04"
+     "05-04",
+     "5/4",
+     "05/04",
+     "Monday"
     ]
    ],
    "must_not": [],
@@ -74,7 +80,10 @@
      "May 8",
      "8 May",
      "2026-05-08",
-     "05-08"
+     "05-08",
+     "5/8",
+     "05/08",
+     "Friday"
     ]
    ],
    "must_not": [],
@@ -85,23 +94,33 @@
   {
    "n": 5,
    "category": "date_who",
-   "text": "when was the last message in the thread, and who sent it?",
+   "text": "when was his last message in the thread, and what was it about?",
    "flags": "",
    "type": "fact",
-   "must": [
-    "Daniel"
-   ],
+   "must": [],
    "any": [
     [
      "May 11",
      "11 May",
      "2026-05-11",
-     "05-11"
+     "05-11",
+     "5/11",
+     "Monday"
+    ],
+    [
+     "expansion account",
+     "quick answers",
+     "three questions",
+     "shed",
+     "east corner",
+     "half compost",
+     "between meetings",
+     "deposit"
     ]
    ],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "The last message is Daniel's quick answers on Monday, May 11, 2026.",
+   "expected": "Monday, May 11: his quick answers to Maya's three questions (deposit from the expansion account, compost limit only for in-ground plots, school start season left open) plus the shed moved to the east corner.",
    "fact_ids": []
   },
   {
@@ -114,7 +133,7 @@
    "any": [],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "Approves the expansion in principle with changes: cap lowered to $34,000; 24 plots and 14 cedar raised beds by the gate; compost max 35%; Hollis water line at $6,900 with a $1,600 deposit; small shed on skids yes, second shed no; greenhouse deferred until the permit; $475 city permit via Lena Whitfield; no paid crew leader; bakery pledge $3,200 plus 27% of June loaves; Oakdale program only with a signed principal's letter; three deadlines (May 15, 21, 29) and a meeting May 19 at 6:30 p.m.",
+   "expected": "Approves the expansion in principle with changes: cap lowered to $34,000; 24 plots and 14 cedar raised beds by the gate; compost max 35%; Hollis water line at $6,900 with a $1,600 deposit; small shed on skids yes, second shed no; greenhouse deferred until the permit; $475 city permit via Lena Whitfield; no paid crew leader; bakery pledge $3,200 plus 27% of June loaves; Alder Hollow program only with a signed principal's letter; three deadlines (May 15, 21, 29) and a meeting May 19 at 6:30 p.m.",
    "fact_ids": [
     "F04",
     "F05",
@@ -167,7 +186,7 @@
     [
      "May 19",
      "6:30",
-     "meeting"
+     "Tuesday"
     ],
     [
      "Miller",
@@ -204,18 +223,69 @@
    ],
    "facts": [
     [
-     "in principle"
+     "in principle",
+     "with changes",
+     "approv"
     ],
     [
+     "$34,000",
+     "34,000",
+     "lowering",
+     "lowered",
+     "lower the cap"
+    ],
+    [
+     "greenhouse"
+    ],
+    [
+     "shed"
+    ],
+    [
+     "Hollis",
+     "water line"
+    ],
+    [
+     "permit",
+     "Lena",
+     "$475",
+     "city permit"
+    ],
+    [
+     "Miller",
+     "Bakery",
+     "bakery",
+     "$3,200",
+     "27%"
+    ],
+    [
+     "two-season",
+     "two season",
+     "permanent"
+    ],
+    [
+     "May 15",
+     "May 21",
+     "May 29",
+     "deadline"
+    ],
+    [
+     "Alder Hollow",
+     "school",
+     "crew leader"
+    ],
+    [
+     "turning down",
+     "couple of things",
      "two of the items",
-     "two items",
-     "no to two",
-     "second shed"
+     "not approving the total",
+     "turned down"
     ],
     [
-     "holding two",
-     "two decisions",
-     "holding"
+     "not ready to decide",
+     "holding",
+     "couple more",
+     "until we know more",
+     "defer"
     ],
     [
      "revised plan",
@@ -224,21 +294,10 @@
     [
      "good work",
      "we are doing this",
-     "doing this"
-    ],
-    [
-     "$34,000",
-     "34,000"
-    ],
-    [
-     "greenhouse"
-    ],
-    [
-     "pace and money",
-     "not about whether"
+     "pace and money"
     ]
    ],
-   "min_facts": 4
+   "min_facts": 5
   },
   {
    "n": 8,
@@ -250,7 +309,7 @@
    "any": [],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "Approval in principle with changes; cap $34,000; 24 plots and 14 raised beds; Hollis water line $6,900 with $1,600 deposit; shed yes, second shed no; greenhouse deferred; permit $475 through Lena Whitfield; no paid crew leader; bakery $3,200 and 27%; Oakdale needs a signed letter; deadlines May 15, 21, 29; meeting May 19 at 6:30 p.m.",
+   "expected": "Approval in principle with changes; cap $34,000; 24 plots and 14 raised beds; Hollis water line $6,900 with $1,600 deposit; shed yes, second shed no; greenhouse deferred; permit $475 through Lena Whitfield; no paid crew leader; bakery $3,200 and 27%; Alder Hollow needs a signed letter; deadlines May 15, 21, 29; meeting May 19 at 6:30 p.m.",
    "fact_ids": [
     "F04",
     "F05",
@@ -298,7 +357,7 @@
     [
      "May 19",
      "6:30",
-     "meeting"
+     "Tuesday"
     ],
     [
      "Miller",
@@ -308,7 +367,7 @@
      "27%"
     ],
     [
-     "Oakdale",
+     "Alder Hollow",
      "school",
      "signed letter"
     ]
@@ -325,7 +384,7 @@
    "any": [],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "Expansion approved in principle under a $34,000 cap; greenhouse deferred until the permit; Hollis water line approved with a $1,600 deposit paid from the expansion account; compost limit applies to in-ground plots only (raised beds may be half compost); shed moved to the east corner by the gate because the north line is in the setback; Oakdale start season still open until Daniel meets the principal; meeting May 19 at 6:30 p.m.",
+   "expected": "Expansion approved in principle under a $34,000 cap; greenhouse deferred until the permit; Hollis water line approved with a $1,600 deposit paid from the expansion account; compost limit applies to in-ground plots only (raised beds may be half compost); shed moved to the east corner by the gate because the north line is in the setback; Alder Hollow start season still open until Daniel meets the principal; meeting May 19 at 6:30 p.m.",
    "fact_ids": [
     "F04",
     "F05",
@@ -367,7 +426,7 @@
     [
      "May 19",
      "6:30",
-     "meeting"
+     "Tuesday"
     ],
     [
      "expansion account"
@@ -375,16 +434,18 @@
     [
      "east corner",
      "setback",
-     "by the gate"
+     "corner by the gate"
     ],
     [
      "half compost",
-     "half",
-     "raised beds"
+     "up to half",
+     "in-ground plots only",
+     "only to the in-ground",
+     "applies only"
     ],
     [
      "principal",
-     "Oakdale",
+     "Alder Hollow",
      "school"
     ]
    ],
@@ -419,10 +480,11 @@
    ],
    "any": [],
    "must_not": [
-    "27%"
+    "27%",
+    "40%"
    ],
    "cite": "thread.eml",
-   "expected": "No more than 35% compost; the rest is screened topsoil.",
+   "expected": "No more than 35% compost for the in-ground plots, the rest screened topsoil; in his May 11 reply he adds that raised beds may go up to half compost.",
    "fact_ids": [
     "F10"
    ]
@@ -457,7 +519,11 @@
    ],
    "any": [],
    "must_not": [
-    "46"
+    "46",
+    "32 in-ground",
+    "32 plots",
+    "38 in-ground",
+    "38 plots"
    ],
    "cite": "thread.eml",
    "expected": "24 in-ground plots.",
@@ -480,7 +546,10 @@
     ]
    ],
    "must_not": [
-    "46"
+    "46",
+    "22 raised",
+    "20 raised",
+    "140"
    ],
    "cite": "thread.eml",
    "expected": "14 cedar raised beds, placed nearest the gate.",
@@ -498,7 +567,9 @@
     "46"
    ],
    "any": [],
-   "must_not": [],
+   "must_not": [
+    "58"
+   ],
    "cite": "thread.eml",
    "expected": "46 active volunteers.",
    "fact_ids": [
@@ -658,7 +729,9 @@
    "must_not": [
     "rejected the greenhouse",
     "rejects the greenhouse",
-    "no to the greenhouse"
+    "rejecting the greenhouse",
+    "turned down the greenhouse",
+    "greenhouse was rejected"
    ],
    "cite": "thread.eml",
    "expected": "The second, larger shed (the old shed is a short walk away and it would pay for storage of things they do not own) and the paid weekend crew leader (paying one volunteer changes how every other volunteer sees the work, it cannot easily be stopped, and there is no room under the cap).",
@@ -682,11 +755,14 @@
     ],
     [
      "bakery sign",
-     "a sign",
-     "the sign",
+     "bakery's sign",
+     "sign with the bakery",
+     "sign for the bakery",
      "sign with",
      "sign at the street",
-     "bakery's name"
+     "bakery's name",
+     "name on it",
+     "question of a sign"
     ],
     [
      "Priya",
@@ -704,11 +780,11 @@
   {
    "n": 24,
    "category": "decision",
-   "text": "what did he approve only on a condition, and what's the condition?",
+   "text": "which program did he approve only on a condition, and what's the condition?",
    "flags": "",
    "type": "fact",
    "must": [
-    "Oakdale"
+    "Alder Hollow"
    ],
    "any": [
     [
@@ -720,7 +796,7 @@
    ],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "The Oakdale Elementary school program, provided the school sends a signed letter from its principal naming the supervising adults and confirming visits end before the afternoon heat.",
+   "expected": "The Alder Hollow Elementary school program, provided the school sends a signed letter from its principal naming the supervising adults and confirming visits end before the afternoon heat.",
    "fact_ids": [
     "F27"
    ]
@@ -786,10 +862,21 @@
      "said no",
      "declin",
      "only one shed",
-     "one shed"
+     "one shed",
+     "did not say yes",
+     "didn't say yes",
+     "only the smaller",
+     "smaller shed",
+     "larger one",
+     "not the second",
+     "not to the second"
     ]
    ],
-   "must_not": [],
+   "must_not": [
+    "yes to the second shed",
+    "approved the second shed",
+    "approved both sheds"
+   ],
    "cite": "thread.eml",
    "expected": "No. He approved only one shed on skids at $1,380 and rejected the second, larger shed.",
    "fact_ids": [
@@ -924,12 +1011,13 @@
      "05-15"
     ],
     [
+     "under the cap",
+     "under the new cap",
+     "at or under",
      "line items",
      "same line",
-     "Priya",
      "side by side",
      "compare",
-     "under the",
      "$34,000",
      "34,000",
      "one-page",
@@ -1093,7 +1181,7 @@
      "35%"
     ],
     [
-     "Oakdale",
+     "Alder Hollow",
      "June",
      "fall",
      "school",
@@ -1105,7 +1193,7 @@
     "fence"
    ],
    "cite": "thread.eml",
-   "expected": "1. Should the $1,600 Hollis deposit come from the general account or the expansion account? 2. Does the 35% compost limit apply to raised beds too? 3. Should the Oakdale program start in June or wait until fall?",
+   "expected": "1. Should the $1,600 Hollis deposit come from the general account or the expansion account? 2. Does the 35% compost limit apply to raised beds too? 3. Should the Alder Hollow program start in June or wait until fall?",
    "fact_ids": [
     "F34"
    ]
@@ -1133,7 +1221,7 @@
    ],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "Deposit comes from the expansion account (Priya writes the check when the countersigned contract arrives); the compost limit applies only to in-ground plots, raised beds can be up to half compost; the program start stays open until he walks the lot with the Oakdale principal; and the shed moves to the east corner by the gate because the north line is in the setback.",
+   "expected": "Deposit comes from the expansion account (Priya writes the check when the countersigned contract arrives); the compost limit applies only to in-ground plots, raised beds can be up to half compost; the program start stays open until he walks the lot with the Alder Hollow principal; and the shed moves to the east corner by the gate because the north line is in the setback.",
    "fact_ids": [
     "F35",
     "F36",
@@ -1151,7 +1239,7 @@
    "any": [
     [
      "third",
-     "Oakdale",
+     "Alder Hollow",
      "school program",
      "program start",
      "start season",
@@ -1166,7 +1254,7 @@
    ],
    "must_not": [],
    "cite": "thread.eml",
-   "expected": "The third one, whether the Oakdale program starts in June or the fall; he deferred it until he has walked the lot with the principal.",
+   "expected": "The third one, whether the Alder Hollow program starts in June or the fall; he deferred it until he has walked the lot with the principal.",
    "fact_ids": [
     "F37"
    ]
@@ -1183,11 +1271,14 @@
    "any": [
     [
      "bakery sign",
-     "a sign",
-     "the sign",
+     "bakery's sign",
+     "sign with the bakery",
+     "sign for the bakery",
      "sign with",
      "sign at the street",
-     "bakery's name"
+     "bakery's name",
+     "name on it",
+     "question of a sign"
     ]
    ],
    "must_not": [],
@@ -1211,8 +1302,9 @@
     [
      "two full seasons",
      "two seasons",
-     "spring",
-     "fall"
+     "one spring and one fall",
+     "spring and one fall",
+     "spring and a fall"
     ]
    ],
    "must_not": [],
@@ -1278,7 +1370,7 @@
   {
    "n": 43,
    "category": "change",
-   "text": "what number did he change from Maya's plan?",
+   "text": "what budget number did he change from Maya's plan, and to what?",
    "flags": "",
    "type": "fact",
    "must": [
@@ -1308,7 +1400,9 @@
     "$2,850"
    ],
    "any": [],
-   "must_not": [],
+   "must_not": [
+    "$3,150"
+   ],
    "cite": "thread.eml",
    "expected": "$2,850, the quote from last year's yard, delivered and dumped in one load.",
    "fact_ids": [
@@ -1326,6 +1420,121 @@
    "must_not": [],
    "cite": "thread.eml",
    "expected": "REFUSE",
+   "fact_ids": []
+  },
+  {
+   "n": 46,
+   "category": "clarification",
+   "text": "what did he mean by 'the cap is a ceiling, not a target'?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "general fund"
+   ],
+   "any": [
+    [
+     "under",
+     "difference",
+     "savings",
+     "extras",
+     "not a target"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "If the water line and beds come in under the cap, the difference stays in the general fund; it is not spent on extras.",
+   "fact_ids": []
+  },
+  {
+   "n": 47,
+   "category": "clarification",
+   "text": "what did he mean when he said the bakery money is a pledge, not cash in the bank?",
+   "flags": "",
+   "type": "fact",
+   "must": [
+    "pledge"
+   ],
+   "any": [
+    [
+     "does not assume",
+     "not assume",
+     "cap does not",
+     "when it arrives",
+     "addition to the cap",
+     "not part of it",
+     "arrives",
+     "not counted"
+    ]
+   ],
+   "must_not": [],
+   "cite": "thread.eml",
+   "expected": "The pledge is not counted inside the $34,000 cap; it is treated as an addition when it arrives.",
+   "fact_ids": []
+  },
+  {
+   "n": 48,
+   "category": "request_deadline",
+   "text": "what questions did he ask me?",
+   "flags": "",
+   "type": "list",
+   "must": [
+    "fence",
+    "wheelchair"
+   ],
+   "any": [
+    [
+     "Alder Hollow",
+     "contact"
+    ],
+    [
+     "rain",
+     "water sits",
+     "heavy rain"
+    ]
+   ],
+   "must_not": [
+    "expansion account",
+    "general account",
+    "June or",
+    "until the fall"
+   ],
+   "cite": "thread.eml",
+   "expected": "Four: fence ownership on the east line; how many beds at wheelchair height; the Alder Hollow contact and whether they saw the lot; whether anyone walked the lot after heavy rain.",
+   "fact_ids": []
+  },
+  {
+   "n": 49,
+   "category": "decision",
+   "text": "did he say yes to hiring Hollis?",
+   "flags": "",
+   "type": "fact",
+   "must": [],
+   "any": [
+    [
+     "yes",
+     "approv",
+     "take it",
+     "take the quote",
+     "take that quote",
+     "go ahead",
+     "fair",
+     "want to take"
+    ],
+    [
+     "$1,600",
+     "1,600",
+     "deposit",
+     "inspect"
+    ]
+   ],
+   "must_not": [
+    "$7,650",
+    "no, he",
+    "No, he",
+    "did not approve"
+   ],
+   "cite": "thread.eml",
+   "expected": "Yes: he approves the $6,900 Hollis quote and the $1,600 deposit; the balance only after the city inspection sign-off, written into the contract.",
    "fact_ids": []
   }
  ]
