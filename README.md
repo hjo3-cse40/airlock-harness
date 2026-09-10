@@ -259,10 +259,13 @@ the routing (`email_target`, `gathered`):
   (about 10k tokens); above that a per-message subset is read and a `COVERAGE`
   warning says how many chunks were left out. The refusal gate does not apply to a
   read; the model still answers "Not specified" when the messages do not say.
-- Everything else is the normal search, with two extras: the thread overview rides
-  along with any email hit, and the best dense (cosine) chunk rides along when the
+- Everything else is the normal search, with three extras: the thread overview rides
+  along with any email hit; the best dense (cosine) chunk rides along when the
   fused ranking left it out and it clears the dense gate, so a paraphrase the words
-  missed ("meet" for "meeting") costs one extra source, not the answer.
+  missed ("meet" for "meeting") costs one extra source, not the answer; and a figure
+  typed into the question ("who quoted 11,750") brings the chunks that hold it
+  (at most two, best word match first), because a bare fee table embeds far from
+  any question and the fused ranking otherwise drops the one chunk that answers it.
 - For a full, cited bullet summary of one file use `/summarize thread.eml` (or
   `summarize --only thread.eml` on the command line).
 

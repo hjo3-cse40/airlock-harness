@@ -1452,7 +1452,7 @@ def retrieve(chunks, question, top_k, stats_chunks, emb_model, diverse=False, ta
             groups.append((s, [c for c in tc if email_meta(c).get("from") == s]))
     if not groups:
         hits, bm_top, cos_top = hybrid(chunks, question, top_k, stats_chunks, emb_model, diverse=diverse)
-        return dense_rescue(hits, rescue_min), bm_top, cos_top, []
+        return number_rescue(dense_rescue(hits, rescue_min), chunks, question, stats_chunks), bm_top, cos_top, []
     quota = max(PER_FOLDER_MIN, top_k // len(groups))
     stats = stats_chunks or chunks
     picked, seen = [], set()
@@ -1471,7 +1471,7 @@ def retrieve(chunks, question, top_k, stats_chunks, emb_model, diverse=False, ta
         if c["id"] not in seen:
             seen.add(c["id"]); picked.append((s_, cs, c))
     picked.sort(key=lambda t: -(t[0] + 10 * (t[1] or 0)))   # score order for the [S#] labels
-    return dense_rescue(picked, rescue_min), bm_top, cos_top, named
+    return number_rescue(dense_rescue(picked, rescue_min), chunks, question, stats_chunks), bm_top, cos_top, named
 
 def dense_rescue(hits, rescue_min):
     """The top-cosine chunk of the last hybrid() call rides along when the fused
@@ -1481,6 +1481,46 @@ def dense_rescue(hits, rescue_min):
     if not best or best[0] < rescue_min or any(c["id"] == best[1]["id"] for _, _, c in hits):
         return hits
     return hits + [(0.0, best[0], best[1])]
+
+NUMBER_RESCUE_MIN_DIGITS = 3   # 3+ digits: a fee, an invoice number, a page; not a count or a day
+NUMBER_RESCUE_MAX = 2          # extra sources at most; a shared figure needs both holders
+
+def question_numbers(question):
+    """Figures the question itself supplies, comma-stripped: '11,750' -> '11750'. Years
+    (1900-2099) and the parts of an ISO date are not figures; '2026-09-15' names a day,
+    and nearly every chunk carries a year."""
+    q = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", " ", question)
+    out = []
+    for n in re.findall(r"\d[\d,]*(?:\.\d+)?", q):
+        b = n.replace(",", "").rstrip(".")
+        if len(b.replace(".", "")) < NUMBER_RESCUE_MIN_DIGITS or re.fullmatch(r"(19|20)\d\d", b):
+            continue
+        if b not in out:
+            out.append(b)
+    return out
+
+def number_rescue(hits, chunks, question, stats_chunks=None):
+    """A figure typed into the question is the strongest possible lexical signal and the
+    weakest possible dense one: 'who quoted 11,750' ranks the Foxtrot fee table first on
+    BM25 (13.4) and the fused ranking drops it, because a bare fee table embeds far from
+    the question (counsel-2 first run, 2026-09-10, items 17 and 18). When the question
+    carries a figure and some chunk in the pool holds that figure, the best BM25 chunk
+    among the holders rides along as one extra source, the dense rescue in the other
+    direction. It never removes a chunk and never fires on a question with no figure."""
+    nums = question_numbers(question)
+    if not nums or not chunks:
+        return hits
+    have = {c["id"] for _, _, c in hits}
+    def holds(c):
+        text = ((c.get("heading") or "") + "\n" + (c.get("text") or "")).replace(",", "")
+        return any(re.search(r"(?<![\d.])" + re.escape(n) + r"(?![\d])", text) for n in nums)
+    holders = [c for c in chunks if c["id"] not in have and holds(c)]
+    if not holders:
+        return hits
+    # up to NUMBER_RESCUE_MAX holders, best BM25 first: when two firms quote the same
+    # figure ('two firms both say 4,800'), the answer needs both chunks, not one
+    ranked = bm25(holders, question, NUMBER_RESCUE_MAX, stats_chunks or chunks)
+    return hits + [(score, 0.0, c) for score, c in ranked[:NUMBER_RESCUE_MAX]]
 
 # ---------------- LM Studio ----------------
 
@@ -4721,6 +4761,22 @@ def selftest(min_score):
     check("retrieval: a single-firm question is unchanged (plain hybrid)",
           retrieve(sc, "What did Firm Alpha quote for a provisional?", 5, None, None)[3] == []
           and len(retrieve(sc, "What did Firm Alpha quote for a provisional?", 5, None, None)[0]) == 5)
+    # number rescue: a figure in the question keeps the chunk that holds it
+    check("number rescue: question_numbers keeps figures and drops years, dates and small counts",
+          question_numbers("who quoted 11,750 for 3 filings in 2026, sent 2026-09-15, page 12?") == ["11750"]
+          and question_numbers("what did Firm Alpha say?") == []
+          and question_numbers("is it $19,500 per patent or $19,500 total") == ["19500"])
+    nr = number_rescue([], sc, "who quoted 19,500", None)
+    check("number rescue: a figure nobody retrieved brings its holders along, at most NUMBER_RESCUE_MAX",
+          1 <= len(nr) <= NUMBER_RESCUE_MAX and all("19500" in c["text"].replace(",", "") for _, _, c in nr)
+          and nr[0][0] >= nr[-1][0])
+    one = number_rescue([], sc, "what is the 364 government fee", None)   # the guide is the only holder
+    check("number rescue: no figure, a year, or a holder already present changes nothing",
+          number_rescue([], sc, "what did Firm Alpha quote for a provisional?", None) == []
+          and number_rescue([], sc, "what happened in 2026?", None) == []
+          and len(one) == 1 and number_rescue(one, sc, "what is the 364 government fee", None) == one)
+    check("number rescue: a fee typed into the question reaches retrieve() even when the fused ranking drops it",
+          any("19500" in c["text"].replace(",", "") for _, _, c in retrieve(sc, "who quoted 19,500", 5, None, None)[0]))
     check("editor: enter keeps a typed /set value instead of refilling the row",
           drive(list("/set top-k 8") + ["enter"])[0] == "/set top-k 8"
           and chat_menu("/set top-k 8", st) == [] and chat_menu("/set top", st) != [])
