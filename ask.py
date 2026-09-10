@@ -1129,6 +1129,13 @@ def folders_named(question, chunks):
             named.append(f)
     return named if len(named) >= 2 else []
 
+def in_scope(path, scope):
+    """Is an indexed file inside --only/scope? A scope names a folder or one
+    file, so a folder match needs the separator: 'firm-alpha' must not pull in
+    'firm-alpha-ip/fee.md'. A nested scope ('firm-alpha/2026') works the same."""
+    s = (scope or "").rstrip("/")
+    return not s or path == s or path.startswith(s + "/")
+
 # ---------------- email threads: who a question is about, and reading a whole message ----------------
 #
 # An .eml chunk carries c["email"] = {n, of, from, to, date, self} (or {"overview": True}
@@ -1547,6 +1554,12 @@ def generate(system, user, model, on_token=None, gen=None, thinking=False, on_th
 
 # ---------------- verify ----------------
 
+def sources_text(chunks):
+    """The text the verifiers check an answer against. _chunk_lines moves a heading
+    line out of the chunk body, so a figure that lives only in a heading (a section
+    titled 'Aggregate fee cap of $75,000') would otherwise read as invented."""
+    return "\n".join(((c.get("heading") or "") + "\n" + c["text"]).strip() for c in chunks)
+
 def verify_numbers(answer, source_text):
     """Every number in the answer must exist in the sources. Dumb code, no AI."""
     clean = re.sub(r"\[S\d+\]", "", answer)                    # drop citation labels
@@ -1754,7 +1767,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     index = load_index(matter)
     if not quiet and head:
         print(turn_head(question, "ask", only))
-    if not (only and only.startswith(MODEL_NOTES)):
+    if not (only and in_scope(only, MODEL_NOTES)):
         index = {**index, "chunks": [c for c in index["chunks"] if not is_model_note(c)]}
     sk = index.get("skipped") or []
     if sk and not quiet:
@@ -1763,7 +1776,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
               f"{' ...' if len(sk) > 3 else ''}", file=sys.stderr)
     chunks = index["chunks"]
     if only:
-        chunks = [c for c in chunks if c["file"].startswith(only)]
+        chunks = [c for c in chunks if in_scope(c["file"], only)]
         if not chunks:
             sys.exit(f"No indexed files under '{only}/'. Check the folder name, and re-run ingest.")
     chat_model, emb_model = server_models()
@@ -1839,7 +1852,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
     if (meta or {}).get("finish") == "length":
         warnings.append(f"TRUNCATED: the answer hit the {(gen or GEN)['max_tokens']:,}-token limit and may be cut; "
                         f"ask a narrower question, or use /summarize <file> for a whole-file summary")
-    warnings += verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
+    warnings += verify_numbers(answer, sources_text([c for _, _, c in hits]))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     if dropped:
         warnings.append(f"COVERAGE: read {len(gathered)} of {len(gathered) + dropped} chunks of the "
@@ -1890,7 +1903,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
         print(turn_head(question, "reason, follow-up" if previous else "reason", only))
     chunks = index["chunks"]
     if only:
-        chunks = [c for c in chunks if c["file"].startswith(only)]
+        chunks = [c for c in chunks if in_scope(c["file"], only)]
         if not chunks:
             sys.exit(f"No indexed files under '{only}/'. Check the folder name, and re-run ingest.")
     top_k = max(top_k, REASON_MIN_TOPK)
@@ -2003,7 +2016,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
             elif live:
                 sys.stdout.write("\r\x1b[K")
         print()
-    warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
+    warnings = verify_numbers(answer, sources_text([c for _, _, c in hits]))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     warnings += verify_inference_labels(answer)
     if dropped:
@@ -2593,7 +2606,7 @@ class ChatState:
         self.files = sorted({c["file"] for c in self.index["chunks"]})
 
     def has_scope(self, folder):
-        return any(f.startswith(folder) for f in self.files)
+        return any(in_scope(f, folder) for f in self.files)
 
     def prompt(self):
         return f"{self.matter}/{self.scope} > " if self.scope else f"{self.matter} > "
@@ -3408,7 +3421,7 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
     index = load_index(matter)
     chunks = index["chunks"]
     if only:
-        chunks = [c for c in chunks if c["file"].startswith(only)]
+        chunks = [c for c in chunks if in_scope(c["file"], only)]
         if not chunks:
             sys.exit(f"No indexed files under '{only}/'. Check the folder name, and re-run ingest.")
     total = len(chunks)
@@ -3452,7 +3465,7 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
     if not quiet:
         rend.close()
         print()
-    src_text = "\n".join(c["text"] for c in selected)
+    src_text = sources_text(selected)
     warnings = verify_numbers(summary, src_text)
     warnings += verify_attribution(summary, [(c["file"], c["heading"] or "") for c in selected])
     warnings += verify_grounding(summary)
@@ -3506,6 +3519,13 @@ def selftest(min_score):
     w = verify_numbers("The CD is 1.2 nm and the budget is 999 C",
                        "\n".join(c["text"] for c in index["chunks"]))
     check("number check flags 999, passes 1.2", w == ["UNVERIFIED NUMBER: 999"])
+    # a figure that lives only in a heading is real; _chunk_lines keeps it out of the body
+    hc = _chunk_lines(["## Aggregate fee cap of $75,000", "The cap applies per matter."], "cap.md", "")
+    check("number check: a heading-only figure verifies, an absent one still warns",
+          verify_numbers("The cap is $75,000 and the retainer is $9,100.", sources_text(hc))
+          == ["UNVERIFIED NUMBER: 9,100"]
+          and verify_numbers("The cap is $75,000.",
+                             "\n".join(c["text"] for c in hc)) == ["UNVERIFIED NUMBER: 75,000"])
     check("attribution: OK when the firm is the cited sender",
           verify_attribution("Firm Alpha offered a discount.",
               [("firm-alpha/email-thread.md", "2026-08-20 J. Morgan (Firm Alpha) -> TestCo")]) == [])
@@ -3803,6 +3823,17 @@ def selftest(min_score):
     else:
         print("format-probe live conversion skipped (matter absent or textutil/pdftotext missing)")
 
+    # scope isolation: a sibling folder must not leak into --only (pure, no index)
+    files = ["firm-alpha/fee.md", "firm-alpha/2026/fee.md", "firm-alpha-ip/fee.md",
+             "firm-alphax.md", "context-summary.md"]
+    check("scope: --only firm-alpha keeps its own files and excludes firm-alpha-ip",
+          [f for f in files if in_scope(f, "firm-alpha")]
+          == ["firm-alpha/fee.md", "firm-alpha/2026/fee.md"])
+    check("scope: a nested folder, one file and a trailing slash all still scope",
+          [f for f in files if in_scope(f, "firm-alpha/2026")] == ["firm-alpha/2026/fee.md"]
+          and [f for f in files if in_scope(f, "context-summary.md")] == ["context-summary.md"]
+          and [f for f in files if in_scope(f, "firm-alpha-ip/")] == ["firm-alpha-ip/fee.md"])
+
     # chat/batch shared override parser (pure, no model call)
     check("override parser: full flags parse",
           parse_line_overrides("--only firm-x --top-k 8 --diverse", None, 5, False)
@@ -3827,6 +3858,8 @@ def selftest(min_score):
           and chat_command(st, "/scope firm-bravo")[0] and st.prompt() == "synthetic-counsel/firm-bravo > ")
     check("chat: /scope rejects an unknown folder and keeps the scope",
           "unchanged" in chat_command(st, "/scope nope")[1] and st.scope == "firm-bravo")
+    check("chat: /scope needs a folder boundary, not a name prefix",
+          "unchanged" in chat_command(st, "/scope firm-alph")[1] and st.scope == "firm-bravo")
     check("chat: /scope alone clears to the whole matter",
           chat_command(st, "/scope") == (True, "scope: whole matter (synthetic-counsel)") and st.scope is None)
     check("chat: /only is an alias of /scope, trailing slash tolerated",
