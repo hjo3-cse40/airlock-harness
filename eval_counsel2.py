@@ -3,6 +3,15 @@
 
   python3 eval_counsel2.py [--tag test-questions.txt] [--since "2026-09-10 12:00"] [--verbose]
                            [--envelope] [--release NAME]
+  python3 eval_counsel2.py --compare runA.json runB.json [labelA labelB]   # paired two-run comparison
+      (each file is {question: audit record}; prints per-class discordance + exact McNemar)
+  --document-scope   read must_not / forbid_amounts / forbidden names over the whole answer (old rule)
+
+Sentence scope (default): a sentence that carries an exclusion cue (not, no, never, only, rather
+than, separate, distinct, different, except, but, n't) is skipped by must_not, forbid_amounts and
+the forbidden-name check, so an answer that names a neighbouring figure or firm in order to rule
+it out is not scored as having given it. Measured 2026-09-10: the whole-answer rule turned 3 of
+Gemma's 9 WRONG and 11 of Qwen's 20 into verbosity penalties.
 
 Reads matters/counsel-2/answer-key.json, index.json, source.json (firm aliases) and every
 audit/*.jsonl. Ask-mode items match (batch == tag, normalized question), last line wins.
@@ -90,6 +99,14 @@ class Names:
         return False
 
 
+SENTENCE_SCOPE = True    # default since 2026-09-10; --document-scope restores the old whole-answer reading
+NEG_CUE = re.compile(r"(?i)\b(not|no|never|neither|nor|only|rather than|instead of|separate|distinct|different|unaffiliated|excluding|excluded|except|but)\b|\bn't\b")
+
+def _scoped(ans):
+    """Sentences of the answer that carry NO exclusion cue: the text a document-wide check
+    should read when the answer names a neighbour only to rule it out."""
+    return " ".join(s for s in SENT_SPLIT.split(ans) if s.strip() and not NEG_CUE.search(s))
+
 def score_item(q, r, index_chunks, index_numbers, names):
     """Returns (label, reasons, flags) where flags = {silent_wrong, mis_cited, forged, false_refusal}."""
     why, flags = [], {"mis_cited": False, "forged": False}
@@ -104,7 +121,9 @@ def score_item(q, r, index_chunks, index_numbers, names):
     refused = bool(r.get("refused")) or is_refusal(ans) or any(p in a for p in NEG_EXT)
     wrong = False
     # ---- WRONG conditions ----
-    bad = [t for t in q.get("must_not") or [] if present(t, a)]
+    scope_raw = _scoped(ans) if SENTENCE_SCOPE else ans
+    scope = norm(scope_raw)
+    bad = [t for t in q.get("must_not") or [] if present(t, scope)]
     if bad:
         wrong = True; why.append(f"must_not present: {bad}")
     for tok, lic in q.get("must_not_unless") or []:
@@ -116,11 +135,12 @@ def score_item(q, r, index_chunks, index_numbers, names):
             if present(tok, norm(s)) and re.search(rx, s, flags=re.I):
                 wrong = True; why.append(f"'{tok}' co-occurs with /{rx}/ in one sentence"); break
     amts = amounts_in(ans)
-    if q.get("forbid_amounts") and amts and not (isinstance(q["forbid_amounts"], str)):
-        wrong = True; why.append(f"amount given where none is allowed: {amts}")
+    amts_scoped = amounts_in(scope_raw)
+    if q.get("forbid_amounts") and amts_scoped and not (isinstance(q["forbid_amounts"], str)):
+        wrong = True; why.append(f"amount given where none is allowed: {amts_scoped}")
     nse = q.get("name_set_exact")
     if nse:
-        forbidden = [n for n in nse.get("must_not") or [] if names.present(n, ans)]
+        forbidden = [n for n in nse.get("must_not") or [] if names.present(n, scope_raw)]
         if forbidden:
             wrong = True; why.append(f"forbidden name(s): {forbidden}")
     labels = labels_in(ans)
@@ -190,8 +210,75 @@ def score_item(q, r, index_chunks, index_numbers, names):
     return "SILENT", why, flags
 
 
+def mcnemar_exact(b, c):
+    """Two-sided exact McNemar p over the discordant pairs (b: A right, B wrong; c: the reverse)."""
+    n = b + c
+    if n == 0:
+        return 1.0
+    k = min(b, c)
+    p = sum(math.comb(n, i) for i in range(0, k + 1)) / 2 ** n
+    return min(1.0, 2 * p)
+
+def compare(path_a, path_b, key, index_chunks, index_numbers, names, label_a="A", label_b="B"):
+    """Paired comparison of two runs saved as {question: audit record} JSON snapshots.
+    Prints per-class discordance and the exact McNemar p on CORRECT vs not-CORRECT and on
+    WRONG vs not-WRONG. Item 100-style label flips are the caller's problem to read."""
+    A = json.load(open(path_a, encoding="utf-8")); B = json.load(open(path_b, encoding="utf-8"))
+    rows = []
+    for q in key:
+        if q.get("mode") == "reason":
+            continue
+        ra, rb = A.get(q["text"]), B.get(q["text"])
+        la = score_item(q, ra, index_chunks, index_numbers, names)[0]
+        lb = score_item(q, rb, index_chunks, index_numbers, names)[0]
+        rows.append((q, la, lb))
+    n = len(rows)
+    tot = {label_a: {"CORRECT": 0, "SILENT": 0, "WRONG": 0}, label_b: {"CORRECT": 0, "SILENT": 0, "WRONG": 0}}
+    for _, la, lb in rows:
+        tot[label_a][la] += 1; tot[label_b][lb] += 1
+    print(f"paired comparison over {n} ask-mode items: {label_a} {tot[label_a]}   {label_b} {tot[label_b]}")
+    b_c = sum(1 for _, la, lb in rows if la == "CORRECT" and lb != "CORRECT")
+    c_c = sum(1 for _, la, lb in rows if la != "CORRECT" and lb == "CORRECT")
+    b_w = sum(1 for _, la, lb in rows if la != "WRONG" and lb == "WRONG")
+    c_w = sum(1 for _, la, lb in rows if la == "WRONG" and lb != "WRONG")
+    print(f"CORRECT: {label_a}-only {b_c}, {label_b}-only {c_c}, exact McNemar p = {mcnemar_exact(b_c, c_c):.3f}")
+    print(f"WRONG:   {label_b}-only {b_w}, {label_a}-only {c_w}, exact McNemar p = {mcnemar_exact(b_w, c_w):.3f}")
+    print("\n| class | n | " + f"{label_a} C/S/W | {label_b} C/S/W | discordant |")
+    print("|---|---|---|---|---|")
+    by = {}
+    for q, la, lb in rows:
+        d = by.setdefault(q["category"], {"n": 0, "a": [0, 0, 0], "b": [0, 0, 0], "disc": 0})
+        d["n"] += 1
+        for lab, key_ in ((la, "a"), (lb, "b")):
+            d[key_][["CORRECT", "SILENT", "WRONG"].index(lab)] += 1
+        d["disc"] += la != lb
+    for cat, d in by.items():
+        print(f"| {cat} | {d['n']} | {'/'.join(map(str, d['a']))} | {'/'.join(map(str, d['b']))} | {d['disc']} |")
+    print("\ndiscordant items:")
+    for q, la, lb in rows:
+        if la != lb:
+            print(f"  #{q['n']:>3} [{q['category']}] {la:7} -> {lb:7} {q['text'][:70]}")
+
 def main():
+    global SENTENCE_SCOPE
     args = sys.argv[1:]
+    if "--document-scope" in args:
+        SENTENCE_SCOPE = False
+        print("DOCUMENT SCOPE: must_not, forbid_amounts and forbidden names read the whole answer (pre-2026-09-10 rule)")
+    if "--compare" in args:
+        i = args.index("--compare")
+        key = json.load(open(os.path.join(MATTER, "answer-key.json"), encoding="utf-8"))["questions"]
+        index = json.load(open(os.path.join(MATTER, "index.json"), encoding="utf-8"))
+        src = json.load(open(os.path.join(MATTER, "source.json"), encoding="utf-8"))
+        ic = {c["id"]: (c.get("heading") or "") + "\n" + (c.get("text") or "") for c in index["chunks"]}
+        nums = set()
+        for t in ic.values():
+            for n in re.findall(r"\d[\d,]*(?:\.\d+)?", t):
+                nums.add(n.replace(",", ""))
+        la = args[i + 3] if len(args) > i + 3 and not args[i + 3].startswith("--") else "A"
+        lb = args[i + 4] if len(args) > i + 4 and not args[i + 4].startswith("--") else "B"
+        compare(args[i + 1], args[i + 2], key, ic, nums, Names(src["parties"]), la, lb)
+        return
     def opt(name, default=None):
         return args[args.index(name) + 1] if name in args else default
     tag = opt("--tag", "test-questions.txt")
