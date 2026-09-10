@@ -1,6 +1,6 @@
 {
- "built": "2026-09-04 14:50:25",
- "chunk_version": 7,
+ "built": "2026-09-10 14:04:39",
+ "chunk_version": 8,
  "embed_model": "text-embedding-nomic-embed-text-v1.5@q8_0",
  "files": {
   "context-summary.md": "e026d4426df33de2364ddcd3175f518f3556ab38bd45f8762e516a63c8ea2208",
@@ -796,6 +796,7 @@
    "file": "context-summary.md",
    "heading": "What this matter is",
    "text": "TestCo is selecting outside patent counsel for its filing program. The\napplicant team runs the search and the correspondence. The CEO holds the\nbudget decision.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#1",
    "vec": [
     -0.00572,
@@ -1572,6 +1573,7 @@
    "file": "context-summary.md",
    "heading": "The filing program (what firms are quoting against)",
    "text": "- Planned volume: 3 filings in 2026, 4 in 2027, 6 in 2028, 7 in 2029 (20 total).\n- Strategy: US first, then EU counterpart filings.\n- TestCo qualifies as a small entity for USPTO fees.\n- The CEO's cost expectation is about $3,000 per patent. Every real quote so\n  far is above that number.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#2",
    "vec": [
     0.01442,
@@ -2348,6 +2350,7 @@
    "file": "context-summary.md",
    "heading": "Firm Alpha",
    "text": "- Status: responded. Quote call held 2026-08-19 with J. Morgan, partner.\n- A written fixed-fee proposal is in hand (see firm-alpha/ folder).\n- Quoted fixed fees: $12,200 utility application; $7,400 provisional-to-utility\n  conversion; $4,800 provisional; $2,900 office action response.\n- Estimated all-in cost around $19,500 per patent over its life; roughly\n  $340,000 over the 4-year program.\n- Volume discount: 8 percent, but it starts at 12 filings per QUARTER, far\n  above TestCo's volume. Not reachable.\n- EU filing costs: not priced. Handled by foreign associates, quoted separately.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#3",
    "vec": [
     0.03117,
@@ -3124,6 +3127,7 @@
    "file": "context-summary.md",
    "heading": "Firm Bravo",
    "text": "- Status: responded with a partial quote. Provisional only; utility filings\n  will be quoted after a scope review. See firm-bravo/ folder.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#4",
    "vec": [
     0.02145,
@@ -3900,6 +3904,7 @@
    "file": "context-summary.md",
    "heading": "Firm Charlie",
    "text": "- Status: responded. Sent a long services guide but no fee schedule yet;\n  a fee schedule follows after their conflicts check. See firm-charlie/ folder.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#5",
    "vec": [
     -0.02302,
@@ -4676,6 +4681,7 @@
    "file": "context-summary.md",
    "heading": "Firm Delta",
    "text": "- Status: no response. Initial inquiry sent 2026-08-12; follow-up asking for\n  updates sent 2026-08-19. See firm-delta/ folder.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#6",
    "vec": [
     -0.02372,
@@ -5452,6 +5458,7 @@
    "file": "context-summary.md",
    "heading": "Firm Echo",
    "text": "- Status: declined the engagement. Reason: an existing client relationship in\n  the same technology space creates a conflict of interest. Out of the running.\n  See firm-echo/ folder.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#7",
    "vec": [
     0.01303,
@@ -6228,6 +6235,7 @@
    "file": "context-summary.md",
    "heading": "Open questions across the search",
    "text": "- EU counterpart costs: no firm has priced these yet.\n- Whether any firm can approach the CEO's $3,000 per-patent number.\n- Firm Charlie's fee schedule: waiting on their conflicts check.\n- A decision deadline: not set as of 2026-08-26.",
+   "title": "Patent counsel search: context summary (SYNTHETIC TEST DATA)",
    "id": "context-summary.md#8",
    "vec": [
     0.01844,
@@ -10108,6 +10116,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Billing and payment",
    "text": "Fixed fees are invoiced on filing. Payment terms are net 45 days from the\ninvoice date. Late amounts accrue interest at 1 percent per month. Government\nfees are invoiced at cost with no markup, itemized per matter.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#1",
    "vec": [
     0.05945,
@@ -10884,6 +10893,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Staffing",
    "text": "One partner and one associate are assigned to the program. Substitutions\nrequire written notice. Paralegal support is included in the fixed fees and\nis not billed separately.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#2",
    "vec": [
     0.0094,
@@ -11660,6 +11670,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Conflicts",
    "text": "A conflicts check is run at intake for each new invention disclosure. If a\nconflict emerges mid-matter, Firm Alpha will complete any filing already in\npreparation and then transfer the matter at no transfer charge.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#3",
    "vec": [
     0.01401,
@@ -12436,6 +12447,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Liability",
    "text": "Aggregate liability under this engagement is capped at $250,000 or the fees\npaid in the preceding twelve months, whichever is greater. Neither party is\nliable for consequential damages.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#4",
    "vec": [
     0.07595,
@@ -13212,6 +13224,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Term and termination",
    "text": "Either party may terminate with 60 days written notice. Work in progress at\ntermination is completed and billed at the fixed-fee schedule. Files are\ntransferred within 15 business days of the termination date.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#5",
    "vec": [
     0.04458,
@@ -13988,6 +14001,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Confidentiality",
    "text": "All invention disclosures are held in confidence indefinitely. Firm Alpha\ndoes not use client materials for training, marketing, or publications.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#6",
    "vec": [
     0.02025,
@@ -14764,6 +14778,7 @@
    "file": "firm-alpha/engagement-terms.md",
    "heading": "Docketing",
    "text": "Statutory deadlines are entered into two independent docketing systems.\nReminders issue at 90, 60, and 30 days before each deadline. The client\nreceives a monthly docket report listing every open deadline.",
+   "title": "Firm Alpha: standard engagement terms (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/engagement-terms.md#7",
    "vec": [
     0.00746,
@@ -16316,6 +16331,7 @@
    "file": "firm-alpha/fee-proposal.md",
    "heading": "Scope",
    "text": "Fixed-fee preparation and prosecution for TestCo's US patent filings,\nsmall entity status applied.",
+   "title": "Firm Alpha: fixed-fee proposal (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/fee-proposal.md#1",
    "vec": [
     0.04145,
@@ -17092,6 +17108,7 @@
    "file": "firm-alpha/fee-proposal.md",
    "heading": "Fee schedule",
    "text": "| Service | Fixed fee |\n|---|---|\n| Provisional application | $4,800 |\n| Utility application | $12,200 |\n| Provisional-to-utility conversion | $7,400 |\n| Office action response | $2,900 |",
+   "title": "Firm Alpha: fixed-fee proposal (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/fee-proposal.md#2",
    "vec": [
     0.00929,
@@ -17868,6 +17885,7 @@
    "file": "firm-alpha/fee-proposal.md",
    "heading": "Estimates and terms",
    "text": "Estimated lifetime cost per patent, filing through issue: about $19,500.\nEstimated program cost over the four-year plan: about $340,000.\n\nVolume discount: 8 percent on all fixed fees, available at 12 or more\nfilings per quarter.\n\nEU counterpart filings are handled by our foreign associates and are\nquoted separately per country. No EU pricing is included in this proposal.\n\nGovernment fees, drawings, and translations are billed at cost and are\nnot included in the fixed fees above.",
+   "title": "Firm Alpha: fixed-fee proposal (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/fee-proposal.md#3",
    "vec": [
     0.07209,
@@ -19420,6 +19438,7 @@
    "file": "firm-alpha/meeting-notes-0819.md",
    "heading": "Discussion",
    "text": "Morgan walked through the draft fee schedule. Numbers match the written\nproposal that followed on 2026-08-20.\n\nMorgan mentioned a prior-art search runs about fifteen hundred dollars and\nis optional before a provisional filing.\n\nOn timing: a provisional can be on file within two weeks of disclosure\nreceipt. Utility conversion drafting takes about six weeks.\n\nOn the volume discount: Morgan confirmed the 8 percent tier requires twelve\nor more filings per quarter. TestCo's plan does not reach it in any year.\n\nOn EU work: Firm Alpha does not file EU cases directly. Their foreign\nassociates quote per country at the time of filing.",
+   "title": "Meeting notes: Firm Alpha quote call, 2026-08-19 (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/meeting-notes-0819.md#1",
    "vec": [
     0.02302,
@@ -20196,6 +20215,7 @@
    "file": "firm-alpha/meeting-notes-0819.md",
    "heading": "Action items",
    "text": "- TestCo: send two sample invention disclosures for a test drafting pass.\n- Morgan: send the written proposal. (Received 2026-08-20.)",
+   "title": "Meeting notes: Firm Alpha quote call, 2026-08-19 (SYNTHETIC TEST DATA)",
    "id": "firm-alpha/meeting-notes-0819.md#2",
    "vec": [
     -0.01888,

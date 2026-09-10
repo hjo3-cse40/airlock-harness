@@ -1,9 +1,9 @@
 {
- "built": "2026-09-04 14:44:32",
- "chunk_version": 7,
+ "built": "2026-09-10 14:05:18",
+ "chunk_version": 8,
  "embed_model": "text-embedding-nomic-embed-text-v1.5@q8_0",
  "files": {
-  "chain.eml": "52588be2236abe6928a0836634b89d4c97ef5fe93fd5ab1c66dcb5df6e32cf36",
+  "chain.eml": "011f3b55cba42a13c69ac14e753f3f74c079f4db1e981ec6c1652bf5022e5a1b",
   "grid-order.pptx": "c06814748893f1e78c2bb37a04dc5de9851f92551e0e1038e7b652a8910ab438",
   "por-revC.md": "143c5360bf82a7a2e769c20eda390b1504a83e66fabd6bdff848c1f09ce6bc7a",
   "styles.docx": "20304536d17ffd6445338207b4b4672b2a0e2a49c802d400e0196d08563bb671",
@@ -5499,6 +5499,7 @@
    "file": "por-revC.md",
    "heading": "4. Metal-1",
    "text": "The metal-1 critical dimension (CD) shall be 1.2 nm at post-etch metrology.\n\nThe barrier is TiN. Do not substitute TaN in this module.\n\nMaximum thermal budget after metal-1 is 400 C for 30 min.",
+   "title": "Public fixture. Not a real process. Used for extract/compare/bench.",
    "id": "por-revC.md#0",
    "vec": [
     0.04768,
@@ -6275,6 +6276,7 @@
    "file": "por-revC.md",
    "heading": "Table 2. Etch",
    "text": "| Step | Time_s | Pressure_mT |\n|---|---|---|\n| Breakthrough | 12 | 8 |\n| Main etch | 45 | 12 |",
+   "title": "Public fixture. Not a real process. Used for extract/compare/bench.",
    "id": "por-revC.md#1",
    "vec": [
     0.02322,
@@ -7051,6 +7053,7 @@
    "file": "styles.docx",
    "heading": "Fees",
    "text": "Firm Kilo quotes 3,150 dollars for a provisional filing.",
+   "title": "Engagement Memo",
    "id": "styles.docx#0",
    "vec": [
     0.01892,
@@ -7827,6 +7830,7 @@
    "file": "styles.docx",
    "heading": "Conditions",
    "text": "- Fixed fee covers one round of revisions.\n- Government fees are billed at cost.",
+   "title": "Engagement Memo",
    "id": "styles.docx#1",
    "vec": [
     0.04094,
@@ -8603,6 +8607,7 @@
    "file": "styles.docx",
    "heading": "Conditions",
    "text": "| Service | Fee |\n| Design patent | 1,975 dollars |\n| Trademark search | 640 dollars |",
+   "title": "Engagement Memo",
    "id": "styles.docx#2",
    "vec": [
     0.01242,
@@ -9379,6 +9384,7 @@
    "file": "styles.docx",
    "heading": "Conditions",
    "text": "Prepared by Firm Kilo.",
+   "title": "Engagement Memo",
    "id": "styles.docx#3",
    "vec": [
     0.01184,
