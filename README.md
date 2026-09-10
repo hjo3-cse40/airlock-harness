@@ -11,7 +11,10 @@ truncated, or when the model simply does not know, the output is still fluent
 and confident. The user gets a wrong answer and no error signal.
 
 Airlock is built around one contract: **cite a source or refuse.** When the
-system cannot ground an answer, it goes silent instead of guessing.
+system cannot ground an answer, it goes silent instead of guessing. That
+contract is carried by the prompt and the model. The retrieval gate under it
+only screens out nonsense input, and with the dense embedder off it has
+produced false refusals of its own.
 
 ## Quick start
 
@@ -178,7 +181,22 @@ Each question runs through a fixed pipeline:
    reciprocal rank fusion. Falls back to BM25-only when no embedding model is
    loaded. `--diverse` takes the best chunk per source before filling slots.
 2. **Refusal gate.** If neither retrieval signal clears its threshold, the
-   harness refuses before the model is ever called.
+   harness refuses before the model is ever called. This is a guard against
+   nonsense input, not a guarantee of refusal on a hard question. Measured
+   over the synthetic matters' audit trail: 7 firings in 1,376 clean runs, of
+   which only 1 came from the 1,176 runs with the dense embedder loaded, and
+   that one was a gibberish control ("purple elephant zeppelin carburetor
+   sonata", cosine 0.453). The other 6 were BM25-only runs, and 5 of those
+   were false refusals (see "Refusals are measured" below), so with no
+   embedder loaded this gate costs more answers than it saves. Real questions
+   score cosine 0.50 to 0.87 (median 0.74) against a `dense-min` of 0.5, and
+   BM25 at a median of 13 against a `min-score` of 1.0; 23 answered runs
+   scored BM25 under 1.0 and survived on the dense signal or a deterministic
+   email read. All 198 runs of the 8 benchmark questions the answer key marks
+   REFUSE cleared the gate and reached the model. A correct refusal on a real question
+   is a property of the prompt and the model, not of this gate. The thresholds
+   are left where they are on purpose: raising them buys refusals of real
+   questions, the more expensive mistake.
 3. **Grounded generation.** The model answers from numbered source chunks via
    any OpenAI-compatible local server (built against LM Studio). Decoding is
    greedy (temperature 0), so identical inputs give identical outputs and the
@@ -281,7 +299,18 @@ from a diverse subset and the coverage gap is reported, never hidden.
 - **Jobs, not chat.** One question, one retrieval, one model call. The chat
   prompt is a loop over that job; no answer carries into the next turn.
 - **Refusals are measured.** A refusal rate means nothing without the
-  false-refusal rate next to it.
+  false-refusal rate next to it. For the pre-model gate, over the synthetic
+  matters' audit trail: 7 firings in 1,376 clean runs, of which 5 were false
+  refusals. Four asked "What reason did the firm give in its reply?" scoped to
+  `firm-echo`, whose declination email gives the reason (a conflict of
+  interest with an existing client); one asked "What fee was quoted for a
+  provisional application?" scoped to `firm-bravo`, whose email quotes a flat
+  $6,100. All five had already retrieved the answering chunk and refused on a
+  BM25 score under 1.0 with the dense embedder off. A sixth, "Did Firm Delta
+  respond?" scoped to `firm-delta`, is arguable: the retrieved file records
+  two unanswered TestCo emails. Only the gibberish control is a clean firing.
+  Refusals the model itself writes are the common case and are not yet scored
+  this way.
 - **Coverage is checked.** A file that never got indexed is a silent failure.
   `coverage` diffs the document folder against the index and warns loudly, and
   ingest converts what it can with local tools before it indexes.
@@ -384,8 +413,10 @@ depend on being able to reproduce the server fault again.
   silence, not to lies. Two caveats, both from a review on 2026-09-09:
   citation correctness is scored by hand and is not enforced by any check
   (the number check verifies a number against every retrieved chunk, not
-  against the chunk it was cited to), and the false-refusal rate is not yet
-  measured, though the design principles below call for it. The set is now
+  against the chunk it was cited to), and the false-refusal rate is measured
+  only for the pre-model gate (5 false refusals in 7 firings over 1,376 clean
+  runs, see the design principles above), never for the refusals the model
+  itself writes. The set is now
   saturated, so it can catch a regression but cannot rank two current models.
 - **Summarization.** A separate faithfulness eval scores each summary for
   grounding rate, fabricated numbers (found nowhere in the corpus), and

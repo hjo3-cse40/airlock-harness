@@ -291,6 +291,51 @@ def docx_lines(path):
     walk(body)
     return lines
 
+# Word keeps footnotes, endnotes, headers and footers in their own zip parts, and we read
+# only word/document.xml. A rate card in a footnote or payment terms in a page footer
+# vanishes from a file the index calls fully read, so detect it and say so out loud.
+_DOCX_SIDE_PARTS = (("footnotes", "word/footnotes.xml"), ("endnotes", "word/endnotes.xml"),
+                    ("headers", "word/header"), ("footers", "word/footer"))
+
+# a footer whose whole content is "Page 3 of 12" loses nothing, and nearly every firm
+# document has one, so it must not raise a warning the reader learns to ignore
+_DOCX_BOILERPLATE = re.compile(
+    r"^[\s\-\u2013\u2014\[(]*(page\s*)?\d+\s*(?:(of|/)\s*\d+)?\s*(\uD398\uC774\uC9C0|page)?[\s\-\u2013\u2014.\])]*$", re.I)
+
+def _docx_part_loses_text(z, part, body):
+    """True when `part` holds text that is not page furniture and is not already in the
+    body. A running header repeating the firm name or the title costs nothing when the
+    same words are indexed from document.xml."""
+    try:
+        root = ET.fromstring(z.read(part))
+    except (KeyError, ET.ParseError):
+        return False
+    for p in root.iter(_W + "p"):
+        t = " ".join(_w_text(p).split())
+        if t and not _DOCX_BOILERPLATE.match(t) and t.lower() not in body:
+            return True
+    return False
+
+def docx_dropped_parts(path):
+    """Side parts of a .docx that hold text docx_lines never reads. Empty for a plain
+    file: Word ships separator footnotes and endnotes, and they carry no text."""
+    out = []
+    try:
+        with zipfile.ZipFile(path) as z:
+            try:
+                doc = ET.fromstring(z.read("word/document.xml"))
+                body = " ".join(" ".join(_w_text(p).split()) for p in doc.iter(_W + "p")).lower()
+            except (KeyError, ET.ParseError):
+                body = ""
+            names = sorted(n for n in z.namelist() if n.endswith(".xml"))
+            for label, prefix in _DOCX_SIDE_PARTS:
+                if any(n.startswith(prefix) and _docx_part_loses_text(z, n, body)
+                       for n in names):
+                    out.append(label)
+    except (OSError, zipfile.BadZipFile):
+        return []
+    return out
+
 # ---------------- eml (stdlib email): one file = one message, its quoted chain split into messages ----------------
 
 # ---- headers of a quoted message block (Outlook, Gmail forward, Korean Outlook) ----
@@ -812,6 +857,13 @@ def scan_coverage(docs):
             ext = ext.lower()
             if ext in INGEST_EXTS:
                 indexable[rel] = file_hash(p_)
+                dropped = docx_dropped_parts(p_) if ext in DOCX_EXTS else []
+                if dropped:
+                    # the file IS indexed, so it rides in `skipped` marked partial rather
+                    # than being called unindexed
+                    skipped.append({"file": rel, "ext": ext, "partial": True,
+                                    "why": "indexed but PARTIALLY read: "
+                                           + ", ".join(dropped) + " are not parsed yet"})
                 continue
             companions = by_stem.get((root, stem.lower()), set())
             if any(c in INGEST_EXTS for c in companions):
@@ -923,16 +975,42 @@ def _report_conversions(events):
         elif status == "stale":
             print(f"[stale]   {rel}: {detail}", file=sys.stderr)
 
+def _first_names(items, n=3):
+    return ", ".join(x["file"] for x in items[:n]) + (" ..." if len(items) > n else "")
+
+def _split_partial(skipped):
+    """(not indexed at all, indexed but only partially read). Calling a partial file
+    'NOT indexed' would be false, and a false coverage line is this defect all over."""
+    return ([s for s in skipped if not s.get("partial")],
+            [s for s in skipped if s.get("partial")])
+
+def _coverage_lines(skipped):
+    """The stderr note printed before an answer: one line per class, or []."""
+    missing, partial = _split_partial(skipped)
+    out = []
+    if missing:
+        out.append(f"[coverage] {len(missing)} file(s) in this matter are NOT indexed and "
+                   f"cannot be seen: {_first_names(missing)}")
+    if partial:
+        out.append(f"[coverage] {len(partial)} file(s) are indexed but only PARTIALLY read "
+                   f"(footnotes, headers and footers are dropped): {_first_names(partial)}")
+    return out
+
 def _warn_skipped(skipped, docs):
     if not skipped:
         return
+    missing, partial = _split_partial(skipped)
     print("", file=sys.stderr)
     print("!" * 72, file=sys.stderr)
-    print(f"COVERAGE WARNING: {len(skipped)} file(s) in {docs} are NOT indexed.",
+    if missing:
+        print(f"COVERAGE WARNING: {len(missing)} file(s) in {docs} are NOT indexed.",
+              file=sys.stderr)
+    if partial:
+        print(f"COVERAGE WARNING: {len(partial)} file(s) in {docs} are indexed but only "
+              f"PARTIALLY read.", file=sys.stderr)
+    print("Questions cannot see that content. An answer may look complete and be wrong.",
           file=sys.stderr)
-    print("Questions cannot see them. An answer may look complete and be wrong.",
-          file=sys.stderr)
-    for sk in skipped:
+    for sk in missing + partial:
         print(f"  - {sk['file']}  ({sk['why']})", file=sys.stderr)
     print("!" * 72, file=sys.stderr)
     print("", file=sys.stderr)
@@ -961,9 +1039,12 @@ def coverage(matter):
         for r in gone:
             print(f"    - {r}")
     _warn_skipped(skipped, docs)
-    if not skipped and not stale and not gone:
+    # a partial .docx is warned about above, but there is nothing the caller can run to
+    # clear it, so it must not hold the exit code nonzero forever
+    unread = [x for x in skipped if not x.get("partial")]
+    if not unread and not stale and not gone:
         print("  OK: every file under docs/ is represented in the index.")
-    return 1 if (skipped or stale or gone) else 0
+    return 1 if (unread or stale or gone) else 0
 
 def ingest(matter, quiet=False):
     d = matter_dir(matter)
@@ -986,7 +1067,12 @@ def ingest(matter, quiet=False):
             and (old.get("embed_model") or not emb):
         if not quiet:
             print(f"Index up to date ({len(old.get('chunks', []))} chunks, {len(files)} files).")
-        old["skipped"] = skipped
+        if old.get("skipped") != skipped:
+            # ask() reads coverage facts from index.json, so a newly detected partial file
+            # must reach disk even when no chunk changed
+            old["skipped"] = skipped
+            with open(index_path, "w", encoding="utf-8") as f:
+                json.dump(old, f, indent=1, ensure_ascii=False)
         return old
     chunks = []
     for rel in sorted(files):
@@ -1620,6 +1706,69 @@ def verify_attribution(answer, cited):
                             f"recipient in the cited sources, not a sender")
     return sorted(set(warnings))
 
+# A cited source shows what a party WROTE. No source can show that a party never
+# wrote at all, so "Firm Echo did not reply" is always the model's own inference.
+# We warn only on the strong, evidence-backed form: the answer denies that a named
+# party communicated, and a chunk we actually read carries that party as a SENDER.
+# That is a contradiction the sources themselves prove. Every other negative
+# ("Firm Charlie has not sent a fee schedule", "no firm has priced EU costs",
+# "Firm Charlie did not mention a flat fee") is left alone on purpose: legitimate
+# negatives are common in counsel work and a warning on each one would be noise.
+NEG_PARTY = r"[A-Z][\w.&'()-]*(?:\s+[A-Z][\w.&'()-]*){0,3}"
+# Only verbs that mean "communicated at all". Delivery and content verbs (sent,
+# provided, quoted, mentioned, confirmed, stated) are deliberately absent: their
+# negation is an ordinary status line that a reader can check in the source.
+NEG_VERB = (r"(?:repl(?:y|ies|ied|ying)|respond(?:s|ed|ing)?|answer(?:s|ed|ing)?"
+            r"|writ(?:e|es|ten|ing)|wrote|communicat\w*|contact(?:s|ed|ing)?)")
+NEG_FILL = r"(?:(?:yet|ever|still|again|been|once|otherwise|[A-Za-z]+ly)\s+){0,2}"
+NEG_RE = re.compile(
+    r"\b(" + NEG_PARTY + r")\s+"
+    r"(?:(?:did|do|does|has|have|had|is|are|was|were)\s+(?:not|never)"
+    r"|(?:did|do|does|has|have|had|is|are|was|were)n[’']t"
+    r"|never|failed\s+to)\s+" + NEG_FILL + NEG_VERB +
+    r"|\bno\s+(?:repl(?:y|ies)|response|answer|word|communication|contact)\s+"
+    r"(?:from|by)\s+(" + NEG_PARTY + r")\b")
+# A negative scoped to a window ("did not reply before 2026-08-20") is refuted only
+# by mail inside that window, and this check does not read dates.
+NEG_SCOPE = re.compile(r"\s*(?:before|after|until|till|by|since|within|prior\s+to|as\s+of)\b", re.I)
+# Generic subjects that name no party at all.
+NEG_NOTPARTY = {"sources", "source", "documents", "document", "records", "record",
+                "files", "file", "index", "answer", "answers", "chunks", "chunk"}
+
+def verify_negatives(answer, read):
+    """Deterministic negative-claim check (dumb code, no AI). read = [(file,
+    heading, text)] for every chunk put in front of the model. Warns only when the
+    answer denies that a named party communicated AND a chunk we read shows that
+    party as a sender, so the sources contradict the claim. Every other negative is
+    passed in silence, because a soft advisory on each one would be noise."""
+    if is_refusal_text(answer):
+        return []
+    senders = []
+    for f, heading, body in read:
+        h = heading or ""
+        if "->" in h:
+            senders.append((h.split("->", 1)[0], f, h))    # email heading: sender -> recipient
+        for m in re.finditer(r"(?mi)^\s*from:\s*(.+)$", body or ""):
+            senders.append((m.group(1), f, h))             # a From: line inside the chunk body
+    if not senders:
+        return []                                          # nothing shows anyone writing
+    text = re.sub(r"\[S\d+\]", "", answer)
+    warnings = []
+    for m in NEG_RE.finditer(text):
+        if NEG_SCOPE.match(text, m.end()):
+            continue
+        party = (m.group(1) or m.group(2) or "").strip()
+        toks = _name_tokens(party) - NEG_NOTPARTY
+        if not toks:
+            continue                                       # "The sources do not answer ..."
+        who = next(((f, h) for s, f, h in senders
+                    if any(t in s.lower() for t in toks)), None)
+        if who:
+            warnings.append(f"UNVERIFIED NEGATIVE: '{party}' is a sender in {who[0]}"
+                            + (f" ('{who[1]}')" if who[1] else "")
+                            + ", so a source we read shows them writing; confirm this claim")
+    return sorted(set(warnings))
+
 def split_claims(text):
     """Split a bulleted/prose summary into individual claim lines. Bullet and
     number markers are stripped; short fragments (headers like '**Fees:**') are
@@ -1643,6 +1792,35 @@ def verify_grounding(summary):
             snippet = (c[:70] + "...") if len(c) > 70 else c
             warnings.append(f"UNGROUNDED SENTENCE: {snippet!r}")
     return warnings
+
+_CITE_BRACKET = re.compile(r"\[([^\[\]]{1,400})\]")
+_CITE_PLAIN = re.compile(r"\s*S\d+(?:\s*[,;]\s*S?\d+)*\s*")   # [S1], [S1, S3], [S1; 3]
+
+def citation_labels(text):
+    """The [S#] labels an answer emits, as integers in the order they appear. Two
+    shapes only: a plain group ([S1], [S1, S3], [S1; S3]) and the resolved form
+    resolve_citations writes into a saved note ([S1: file > heading; S2: ...]).
+    In the resolved form a label is read only where 'S<digits>:' opens a part, so
+    digits inside a file name or a heading are never read as a label. Anything
+    else in brackets is not a citation, so [INFERENCE], a bare [2] and the range
+    [S1-S3] are ignored."""
+    out = []
+    for body in _CITE_BRACKET.findall(text):
+        if _CITE_PLAIN.fullmatch(body):
+            out += [int(x) for x in re.findall(r"\d+", body)]
+        else:
+            # resolved form: a label is read only where 'S<digits>:' opens a part
+            out += [int(x) for x in re.findall(r"(?:^|;)\s*S(\d+)\s*:", body)]
+    return out
+
+def verify_citations(answer, n_sources):
+    """Every [S#] must be one of the sources this run actually sent. A document can
+    contain a literal '[S9]', and a model that copies it cites material the run
+    never issued: the label points the reader at nothing and the audit line cannot
+    resolve it. Dumb code, no AI."""
+    bad = sorted({n for n in citation_labels(answer) if n < 1 or n > n_sources})
+    return [f"FORGED CITATION: [S{n}] was never sent to the model; this run had "
+            f"{n_sources} source(s)" for n in bad]
 
 def cap_citations(text, n=3):
     """Trim any run of citation tags to the first n. A small model summarizing a
@@ -1769,11 +1947,9 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
         print(turn_head(question, "ask", only))
     if not (only and in_scope(only, MODEL_NOTES)):
         index = {**index, "chunks": [c for c in index["chunks"] if not is_model_note(c)]}
-    sk = index.get("skipped") or []
-    if sk and not quiet:
-        print(f"[coverage] {len(sk)} file(s) in this matter are NOT indexed and cannot be "
-              f"seen: {', '.join(x['file'] for x in sk[:3])}"
-              f"{' ...' if len(sk) > 3 else ''}", file=sys.stderr)
+    if not quiet:
+        for line in _coverage_lines(index.get("skipped") or []):
+            print(line, file=sys.stderr)
     chunks = index["chunks"]
     if only:
         chunks = [c for c in chunks if in_scope(c["file"], only)]
@@ -1854,6 +2030,8 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
                         f"ask a narrower question, or use /summarize <file> for a whole-file summary")
     warnings += verify_numbers(answer, sources_text([c for _, _, c in hits]))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
+    warnings += verify_citations(answer, len(hits))
+    warnings += verify_negatives(answer, [(c["file"], c["heading"] or "", c["text"]) for _, _, c in hits])
     if dropped:
         warnings.append(f"COVERAGE: read {len(gathered)} of {len(gathered) + dropped} chunks of the "
                         f"targeted message(s) (budget {GATHER_MAX_CHUNKS}); {dropped} not shown")
@@ -2018,7 +2196,9 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
         print()
     warnings = verify_numbers(answer, sources_text([c for _, _, c in hits]))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
+    warnings += verify_negatives(answer, [(c["file"], c["heading"] or "", c["text"]) for _, _, c in hits])
     warnings += verify_inference_labels(answer)
+    warnings += verify_citations(answer, len(hits))
     if dropped:
         warnings.append(f"COVERAGE: read {len(gathered)} of {len(gathered) + dropped} chunks of the "
                         f"targeted message(s) (budget {GATHER_MAX_CHUNKS}); {dropped} not shown")
@@ -2536,7 +2716,9 @@ def docs_folders(matter, index=None):
     '' is the docs root. 'new' = readable files the index has not seen yet."""
     docs = os.path.join(matter_dir(matter), "docs")
     indexed = set((index or {}).get("files") or {})
-    skipped = {s["file"] for s in (index or {}).get("skipped") or []}
+    # a partial file is in both lists; without the filter one file reads as "1 indexed,
+    # 1 skipped" and looks like two
+    skipped = {s["file"] for s in (index or {}).get("skipped") or [] if not s.get("partial")}
     out = []
     for root, dirs, names in os.walk(docs):
         dirs[:] = sorted(d for d in dirs if not _hidden(d))
@@ -3468,7 +3650,9 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
     src_text = sources_text(selected)
     warnings = verify_numbers(summary, src_text)
     warnings += verify_attribution(summary, [(c["file"], c["heading"] or "") for c in selected])
+    warnings += verify_negatives(summary, [(c["file"], c["heading"] or "", c["text"]) for c in selected])
     warnings += verify_grounding(summary)
+    warnings += verify_citations(summary, len(selected))
     if dropped:
         warnings.append(f"COVERAGE: summarized {len(selected)} of {total} chunks "
                         f"(diverse subset); {dropped} not shown")
@@ -3535,6 +3719,30 @@ def selftest(min_score):
     check("attribution: WARN when the firm is only a recipient (outbound-only)",
           verify_attribution("Firm Delta requested a retainer.",
               [("firm-delta/email-initial.md", "2026-08-12 TestCo -> Firm Delta")]) != [])
+    # the 2026-08-28 11:19:43 audit case: "Firm Echo did not reply back" logged zero warnings
+    echo = [("firm-charlie/email-initial.md", "Email: Firm Charlie reply, 2026-08-16",
+             "From: L. Whitfield (Firm Charlie)\nA fee schedule follows our conflicts check."),
+            ("firm-echo/email-rejection.md", "Email: Firm Echo declination, 2026-08-17",
+             "From: T. Nakamura (Firm Echo)\nTo: TestCo applicant team\n"
+             "Subject: RE: Patent counsel inquiry\n"
+             "Thank you for thinking of Firm Echo. We must decline the engagement.")]
+    nw = verify_negatives("- Firm Echo did not reply back [S2].", echo)
+    check("negative: the Echo case warns and names the file where the firm did write",
+          len(nw) == 1 and nw[0].startswith("UNVERIFIED NEGATIVE")
+          and "firm-echo/email-rejection.md" in nw[0])
+    check("negative: the same fabrication reworded still warns (no suppression path)",
+          all(len(verify_negatives(a, echo)) == 1 for a in
+              ("Firm Echo did not respond to our inquiry [S2].",
+               "Firm Echo never replied to the inquiry [S2].",
+               "There was no reply from Firm Echo [S2].")))
+    check("negative: quiet on content, delivery and unread-party negatives",
+          verify_negatives("Firm Charlie did not mention a flat fee in its reply [S1].", echo) == []
+          and verify_negatives("Firm Charlie has not yet sent a fee schedule [S1].", echo) == []
+          and verify_negatives("Firm Zulu did not reply.", echo) == []
+          and verify_negatives("The sources do not answer this question.", echo) == [])
+    check("negative: quiet on a date-scoped negative and on a refusal",
+          verify_negatives("Firm Echo did not reply before 2026-08-20 [S2].", echo) == []
+          and verify_negatives("Not in the documents.", echo) == [])
     pptx = os.path.join(BASE, "matters", "fixtures", "docs", "grid-order.pptx")
     if os.path.exists(pptx):
         sl, _ = pptx_slides(pptx)
@@ -3559,6 +3767,88 @@ def selftest(min_score):
               [x["file"] for x in skipped] == ["unread.pdf"])
         check("coverage treats a .pdf with a .txt companion as covered",
               "paired.txt" in idxable and "paired.pdf" not in idxable)
+
+    # a rate card in a footnote or payment terms in a page footer, read as complete, is the
+    # failure this project exists to prevent, so coverage must call such a file partial
+    wns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    fnote = (f'<w:footnotes xmlns:w="{wns}"><w:footnote w:id="1"><w:p><w:r>'
+             f'<w:t>Rate card: 415 dollars per hour.</w:t></w:r></w:p></w:footnote>'
+             f'</w:footnotes>')
+    def mini_docx(path, extra):
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("word/document.xml",
+                       f'<w:document xmlns:w="{wns}"><w:body><w:p><w:r>'
+                       f'<w:t>Firm Mike LLP will act for TestCo on the terms below.</w:t>'
+                       f'</w:r></w:p></w:body></w:document>')
+            for part, xml in extra.items():
+                z.writestr(part, xml)
+    with tempfile.TemporaryDirectory() as td:
+        mini_docx(os.path.join(td, "letter.docx"), {
+            "word/footnotes.xml": fnote,
+            "word/footer1.xml":
+                f'<w:ftr xmlns:w="{wns}"><w:p><w:r><w:t>Payment due in 30 days.</w:t>'
+                f'</w:r></w:p></w:ftr>'})
+        mini_docx(os.path.join(td, "plain.docx"), {   # Word ships these with no real note
+            "word/footnotes.xml":
+                f'<w:footnotes xmlns:w="{wns}"><w:footnote w:type="separator" w:id="-1">'
+                f'<w:p><w:r><w:separator/></w:r></w:p></w:footnote></w:footnotes>'})
+        mini_docx(os.path.join(td, "pagenum.docx"), {   # a page number loses nothing
+            "word/footer1.xml":
+                f'<w:ftr xmlns:w="{wns}"><w:p><w:r><w:t>Page </w:t></w:r><w:r>'
+                f'<w:t>3 of 12</w:t></w:r></w:p></w:ftr>'})
+        mini_docx(os.path.join(td, "running.docx"), {   # header repeats the body text
+            "word/header1.xml":
+                f'<w:hdr xmlns:w="{wns}"><w:p><w:r><w:t>Firm Mike LLP</w:t>'
+                f'</w:r></w:p></w:hdr>'})
+        didx, dsk = scan_coverage(td)
+        dby = {s["file"]: s for s in dsk}
+        check("docx: footnote and footer text is named as dropped",
+              docx_dropped_parts(os.path.join(td, "letter.docx")) == ["footnotes", "footers"]
+              and "415 dollars" not in "\n".join(docx_lines(os.path.join(td, "letter.docx"))))
+        check("coverage: a .docx with a footnote is indexed but flagged PARTIALLY read",
+              "letter.docx" in didx and dby.get("letter.docx", {}).get("partial") is True
+              and "footnotes" in dby.get("letter.docx", {}).get("why", ""))
+        check("coverage: separators, page numbers and a repeated header raise no partial",
+              all(f in didx and f not in dby
+                  for f in ("plain.docx", "pagenum.docx", "running.docx")))
+    parts = _coverage_lines([{"file": "a.pdf", "why": "no text layer"},
+                             {"file": "b.docx", "why": "footnotes", "partial": True}])
+    check("coverage note: a partially read file is never called NOT indexed",
+          len(parts) == 2 and "a.pdf" in parts[0] and "NOT indexed" in parts[0]
+          and "b.docx" in parts[1] and "PARTIALLY" in parts[1]
+          and "NOT indexed" not in parts[1])
+    # coverage facts must reach disk even when no chunk changed, or a matter ingested
+    # before this fix existed would never report its partial files at question time
+    tmat = os.path.join(BASE, "matters", "_selftest_docx")
+    try:
+        os.makedirs(os.path.join(tmat, "docs"), exist_ok=True)
+        mini_docx(os.path.join(tmat, "docs", "engagement.docx"),
+                  {"word/footnotes.xml": fnote})
+        ingest("_selftest_docx", quiet=True)
+        ipath = os.path.join(tmat, "index.json")
+        with open(ipath, encoding="utf-8") as f:
+            raw = json.load(f)
+        raw["skipped"] = []                      # as an index built before this fix looks
+        with open(ipath, "w", encoding="utf-8") as f:
+            json.dump(raw, f)
+        ingest("_selftest_docx", quiet=True)     # nothing changed but the coverage facts
+        with open(ipath, encoding="utf-8") as f:
+            back = json.load(f)
+        check("coverage: an up-to-date ingest still writes the partial flag to index.json",
+              [s["file"] for s in back.get("skipped") or []] == ["engagement.docx"]
+              and (back["skipped"][0].get("partial") is True))
+        check("chat /folders counts a partially read file once, as indexed",
+              docs_folders("_selftest_docx", back) == [("", 1, 0, 0)])
+        # no parser exists, so nothing the caller can run clears a partial file: a
+        # permanently nonzero exit would just train CI to ignore the exit code
+        check("coverage exits 0 when the only finding is a partially read file",
+              coverage("_selftest_docx") == 0)
+    finally:
+        shutil.rmtree(tmat, ignore_errors=True)
+    fx = os.path.join(BASE, "matters", "fixtures", "docs", "footnotes.docx")
+    if os.path.exists(fx):   # optional: make_fixture_docs.py does not build one yet
+        check("docx fixture: the committed footnote fixture is reported as dropped",
+              docx_dropped_parts(fx) == ["footnotes"])
 
     # native .docx: heading styles -> chunk headings, list items, table whole
     dx = [c for c in index["chunks"] if c["file"] == "styles.docx"]
@@ -4032,6 +4322,17 @@ def selftest(min_score):
           == "- A process is followed [S2][S4][S6].")
     check("cap_citations: one or two citations are left untouched",
           cap_citations("- Alpha quoted $4,800 [S1][S3].") == "- Alpha quoted $4,800 [S1][S3].")
+    # forged citations: a label this run never issued (only the source count is read)
+    check("citations: a label above the source count or a zero label is forged",
+          verify_citations("Alpha quoted $4,800 [S1]. The fee is fixed [S9].", 3)
+          == ["FORGED CITATION: [S9] was never sent to the model; this run had 3 source(s)"]
+          and verify_citations("Bravo [S1, S3]; also [S2; S3].", 3) == []
+          and len(verify_citations("[S0] and [S4].", 3)) == 2)
+    check("citations: only a real label parses, not stray digits or a range",
+          citation_labels("[S1: 2026-09-03-mail.eml > Fees, costs; S2: b.md > (no heading)]") == [1, 2]
+          and citation_labels("[S1: a.md > Fees, 2026]") == [1]
+          and citation_labels("[INFERENCE] and [2] and [...cut]") == []
+          and citation_labels("[S1-S3] is a range, not a label") == [])
 
     # notes: the writer, the guards, the exclusion, the label
     turn = {"question": "What did  Firm Alpha\nquote for a provisional?", "answer": "Alpha quoted $4,800 [S1][S2]. Bravo $6,100 [S1, S2]; see [S9].",
