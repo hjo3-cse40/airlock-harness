@@ -6,7 +6,12 @@
   python3 eval_counsel2.py --compare runA.json runB.json [labelA labelB]   # paired two-run comparison
       (each file is {question: audit record}; prints per-class discordance + exact McNemar)
   --document-scope   read must_not / forbid_amounts / forbidden names over the whole answer (old rule)
+  --sealed-tag sealed-questions.txt   the batch tag of the sealed block; --unseal prints its per-item
+      lines and appends to UNSEAL-LOG.md (the public-minus-sealed CORRECT gap is always printed)
 
+Attribution-aware figures (default): a forbidden AMOUNT (must_not, must_not_unless, forbid_amounts)
+is read only in sentences that attribute it to the question's subject firm or to nobody; a sentence
+naming only another firm is a neighbour. Descriptor questions with no firm name read every sentence.
 Sentence scope (default): a sentence that carries an exclusion cue (not, no, never, only, rather
 than, separate, distinct, different, except, but, n't) is skipped by must_not, forbid_amounts and
 the forbidden-name check, so an answer that names a neighbouring figure or firm in order to rule
@@ -107,6 +112,29 @@ def _scoped(ans):
     should read when the answer names a neighbour only to rule it out."""
     return " ".join(s for s in SENT_SPLIT.split(ans) if s.strip() and not NEG_CUE.search(s))
 
+AMOUNT_TOKEN = re.compile(r"^\$?[\d,]+(?:\.\d+)?$")
+
+def _attributed_scope(ans, question, names):
+    """Attribution-aware reading for forbidden FIGURES (default since 2026-09-10). Beyond the
+    exclusion-cue skip, a sentence that names a firm OTHER than the question's subject, and
+    not the subject itself, is attributing its figures to that other firm: 'India quoted
+    $5,200, revised to $5,600' inside an answer about Alpha IP is a neighbour, not the answer.
+    When the question names no firm (a descriptor question) every sentence is read."""
+    subject = [n for n in names.alias if names.present(n, question)]
+    if not subject:
+        return _scoped(ans) if SENTENCE_SCOPE else ans
+    keep = []
+    for s in SENT_SPLIT.split(ans):
+        if not s.strip():
+            continue
+        if SENTENCE_SCOPE and NEG_CUE.search(s):
+            continue
+        firms_here = [n for n in names.alias if names.present(n, s)]
+        if firms_here and not any(n in firms_here for n in subject):
+            continue                    # attributed to someone else
+        keep.append(s)
+    return " ".join(keep)
+
 def score_item(q, r, index_chunks, index_numbers, names):
     """Returns (label, reasons, flags) where flags = {silent_wrong, mis_cited, forged, false_refusal}."""
     why, flags = [], {"mis_cited": False, "forged": False}
@@ -123,11 +151,13 @@ def score_item(q, r, index_chunks, index_numbers, names):
     # ---- WRONG conditions ----
     scope_raw = _scoped(ans) if SENTENCE_SCOPE else ans
     scope = norm(scope_raw)
-    bad = [t for t in q.get("must_not") or [] if present(t, scope)]
+    fig_scope = norm(_attributed_scope(ans, q.get("text") or "", names))   # forbidden FIGURES only
+    bad = [t for t in q.get("must_not") or [] if present(t, fig_scope if AMOUNT_TOKEN.match(t) else scope)]
     if bad:
         wrong = True; why.append(f"must_not present: {bad}")
     for tok, lic in q.get("must_not_unless") or []:
-        if present(tok, a) and not any(present(l, a) for l in lic):
+        where = fig_scope if AMOUNT_TOKEN.match(tok) else a
+        if present(tok, where) and not any(present(l, a) for l in lic):
             wrong = True; why.append(f"'{tok}' without a licence token {lic}")
     sents = [s for s in SENT_SPLIT.split(ans) if s.strip()]
     for tok, rx in q.get("forbid_cooccur") or []:
@@ -135,7 +165,7 @@ def score_item(q, r, index_chunks, index_numbers, names):
             if present(tok, norm(s)) and re.search(rx, s, flags=re.I):
                 wrong = True; why.append(f"'{tok}' co-occurs with /{rx}/ in one sentence"); break
     amts = amounts_in(ans)
-    amts_scoped = amounts_in(scope_raw)
+    amts_scoped = amounts_in(_attributed_scope(ans, q.get("text") or "", names))
     if q.get("forbid_amounts") and amts_scoped and not (isinstance(q["forbid_amounts"], str)):
         wrong = True; why.append(f"amount given where none is allowed: {amts_scoped}")
     nse = q.get("name_set_exact")
@@ -168,7 +198,10 @@ def score_item(q, r, index_chunks, index_numbers, names):
             if holders and all(frag in c["file"] for c in holders):
                 wrong = True; why.append(f"{n} is sourced only from {frag}"); break
     if not refused:
-        for n in amts:
+        # an amount in a sentence labelled [INFERENCE] is declared computed, not verbatim
+        # (the harness's own rule), so a sum like 16,550 that no chunk holds is not a fabrication
+        verbatim = " ".join(s for s in sents if "[INFERENCE]" not in s.upper())
+        for n in amounts_in(verbatim):
             b = bare(n)
             if b and re.fullmatch(r"\d{3,}(?:\.\d+)?", b) and b not in index_numbers:
                 wrong = True; why.append(f"{n} appears in no index chunk (fabrication)"); break
@@ -226,7 +259,7 @@ def compare(path_a, path_b, key, index_chunks, index_numbers, names, label_a="A"
     A = json.load(open(path_a, encoding="utf-8")); B = json.load(open(path_b, encoding="utf-8"))
     rows = []
     for q in key:
-        if q.get("mode") == "reason":
+        if q.get("mode") == "reason" or q.get("sealed"):
             continue
         ra, rb = A.get(q["text"]), B.get(q["text"])
         la = score_item(q, ra, index_chunks, index_numbers, names)[0]
@@ -282,6 +315,8 @@ def main():
     def opt(name, default=None):
         return args[args.index(name) + 1] if name in args else default
     tag = opt("--tag", "test-questions.txt")
+    sealed_tag = opt("--sealed-tag", "sealed-questions.txt")
+    unseal = "--unseal" in args
     since = opt("--since", "")
     release = opt("--release", "unreleased")
     verbose = "--verbose" in args
@@ -296,6 +331,7 @@ def main():
             index_numbers.add(n.replace(",", ""))
     recs = load_audit()
     ask_recs, reason_recs = {}, {}
+    sealed_recs = {}
     for r in recs:
         if "question" not in r:
             continue
@@ -304,6 +340,10 @@ def main():
                 reason_recs[norm(r["question"])] = r
         elif r.get("batch") == tag:
             ask_recs[norm(r["question"])] = r
+        elif r.get("batch") == sealed_tag:
+            sealed_recs[norm(r["question"])] = r
+    sealed_items = [q for q in key if q.get("sealed")]
+    key = [q for q in key if not q.get("sealed")]
     rows, by_class, pairs = [], {}, {}
     n_correct = n_silent = n_wrong = n_sw = n_fr = n_mc = n_fg = 0
     models = set()
@@ -367,6 +407,26 @@ def main():
         pc = sum(1 for v in pairs.values() if all(x == "CORRECT" for x in v))
         pw = sum(1 for v in pairs.values() if any(x == "WRONG" for x in v))
         print(f"\npairs: {len(pairs)} total, {pc} both-correct, {pw} with a WRONG twin, {len(pairs)-pc-pw} silent")
+    if sealed_items:
+        st = {"CORRECT": 0, "SILENT": 0, "WRONG": 0}; s_sw = 0; s_rows = []
+        for q in sealed_items:
+            r = sealed_recs.get(norm(q["text"]))
+            label, why, fl = score_item(q, r, index_chunks, index_numbers, names)
+            st[label] += 1
+            s_sw += label == "WRONG" and not (r or {}).get("warnings")
+            s_rows.append((q["n"], label, q["category"], q["text"], "; ".join(why)))
+        ns = len(sealed_items)
+        print(f"\nSEALED block: {ns} items  CORRECT {st['CORRECT']} ({st['CORRECT']/ns:.0%})  SILENT {st['SILENT']}  WRONG {st['WRONG']}  silent-wrong {s_sw}"
+              f"   public-minus-sealed CORRECT gap {n_correct/N - st['CORRECT']/ns:+.1%}")
+        if unseal:
+            import datetime
+            with open(os.path.join(MATTER, "UNSEAL-LOG.md"), "a", encoding="utf-8") as f:
+                f.write(f"- {datetime.datetime.now().isoformat(timespec='seconds')} unsealed per-item output, release={release}, code {code_sha}, key {key_sha}\n")
+            for n, label, cat, text, why in s_rows:
+                print(f"  {n:>3} {label:7} {cat:12} {text}" + (f"\n      {why}" if why else ""))
+            print("(per-item sealed output shown; a line was appended to UNSEAL-LOG.md)")
+        else:
+            print("(per-item sealed output hidden; pass --unseal to print it, which appends to UNSEAL-LOG.md)")
     if "--envelope" in args:
         lines = [f"# Operating envelope, counsel-2, release {release}",
                  f"# code {code_sha}  prompt {prompt_sha}  key {key_sha}  index {index.get('built')}  model {', '.join(sorted(models))}",
