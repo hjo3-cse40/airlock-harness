@@ -230,7 +230,8 @@ the routing (`email_target`, `gathered`):
   as a plain search. A date ("his May 7 email", "on 5/11") or an ordinal ("her
   second reply", "the latest message") narrows it to that message.
 - When the targeted messages are small enough (32 chunks, about 8k tokens) they are
-  READ whole, in order, after the overview: a question about a person is answered
+  READ whole, in order, after the overview (in `/reason` as well as in a plain
+  question): a question about a person is answered
   from everything that person wrote, so "what did he reject" works even though the
   reply says "I am not approving" and never "reject". The sources line says
   `read N chunks: ...` and the audit line records `gathered`.

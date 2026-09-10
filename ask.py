@@ -1863,15 +1863,25 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
     # a follow-up ("and Bravo?") retrieves on both questions so the topic carries over
     query = question + " " + previous["question"] if previous and previous.get("question") else question
     target = email_targets(question, chunks)
-    hits, bm_top, cos_top, named = retrieve(chunks, query, top_k,
-                                            index["chunks"] if only else None, emb_model,
-                                            diverse=diverse, target=target, rescue_min=dense_min)
-    hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
-    if any(email_meta(c).get("from") for _, _, c in hits):
-        have = {c["id"] for _, _, c in hits}
-        hits += [(0.0, None, c) for c in overview_chunks(chunks) if c["id"] not in have]
+    stats = index["chunks"] if only else None
+    # the same read decision as ask(): a person's messages that fit the budget, or a broad
+    # question about a thread, are READ whole; the reason prompt then computes over them
+    gathered, dropped, gather_note = plan_read(question, chunks, target)
+    if gathered:
+        bm_all = {c["id"]: s for s, c in bm25(chunks, query, len(chunks), stats_chunks=stats)}
+        hits = [(bm_all.get(c["id"], 0.0), None, c) for c in gathered]
+        bm_top, cos_top, named = max((h[0] for h in hits), default=0.0), None, []
+    else:
+        hits, bm_top, cos_top, named = retrieve(chunks, query, top_k, stats, emb_model,
+                                                diverse=diverse, target=target, rescue_min=dense_min)
+        hits = [(s, cs, c) for s, cs, c in hits if s > 0 or (cs or 0) > 0]
+        if any(email_meta(c).get("from") for _, _, c in hits):
+            have = {c["id"] for _, _, c in hits}
+            hits += [(0.0, None, c) for c in overview_chunks(chunks) if c["id"] not in have]
     audit = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter, "mode": "reason",
              "question": question, "only": only, "batch": batch, "per_folder": named or None,
+             "email_target": target, "gathered": len(gathered) if gathered else None,
+             "gather_dropped": dropped or None,
              "previous": ({"question": previous.get("question"), "answer_chars": len(previous.get("answer") or "")}
                           if previous else None),
              "top_score": round(bm_top, 3),
@@ -1884,6 +1894,8 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
     config = {**run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse),
               **gen, "thinking": True}
     dense_ok = cos_top is not None and cos_top >= dense_min
+    if gathered:
+        dense_ok = True   # the target was chosen deterministically; nothing to gate
     if not hits or (bm_top < min_score and not dense_ok):
         audit.update({"refused": True, "answer": REFUSAL, "warnings": [], "model": None,
                       "config": config})
@@ -1950,6 +1962,9 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
     warnings = verify_numbers(answer, "\n".join(c["text"] for _, _, c in hits))
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     warnings += verify_inference_labels(answer)
+    if dropped:
+        warnings.append(f"COVERAGE: read {len(gathered)} of {len(gathered) + dropped} chunks of the "
+                        f"targeted message(s) (budget {GATHER_MAX_CHUNKS}); {dropped} not shown")
     tw = truncation_warning(meta, gen)
     if tw:
         warnings.append(tw)
@@ -1965,7 +1980,8 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
                   "finish": meta["finish"], "config": config})
     _log(matter, audit)
     if not quiet:
-        print("\n" + sources_block(hits, named=named))
+        print("\n" + sources_block(hits, named=named, note=gather_note or
+                                   (f"about {' and '.join(target['senders'])}" if target else None)))
         if any(w.startswith("UNVERIFIED NUMBER") for w in warnings):
             print(DIM + "(reason mode: a computed number is expected to be unverified; check the arithmetic)" + RESET)
         for w in warnings:
@@ -3597,6 +3613,10 @@ def selftest(min_score):
           and len(rd) - 1 == n_daniel and note.startswith("read "))
     check("eml read: a fact question with no person and no broad wording stays a search",
           plan_read("what is the permit fee", ch, None) == (None, 0, None))
+    rq = "what did he change between his first reply and his second one?"
+    rd2, _, _ = plan_read(rq, ch, email_targets(rq, ch))
+    check("eml read (reason mode uses the same decision): a compare question reads both of his messages",
+          rd2 and {email_meta(c).get("n") for c in rd2 if not email_meta(c).get("overview")} == {2, 4})
     check("eml overview: a self-forward is marked as a filing copy, and the conversation's real last message is named",
           "forwarded the thread to themselves" in ov[0]["text"] and "ends with message 4" in ov[0]["text"])
     check("eml broad: summary phrasing is broad, a fact question is not",
