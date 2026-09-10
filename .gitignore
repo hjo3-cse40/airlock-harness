@@ -1,8 +1,16 @@
 .DS_Store
 __pycache__/
 *.bak
-matters/patent-counsel/
-matters/haystack-*/
+# matters/: ALLOWLIST. Every matter is ignored unless it is named below.
+# A new matter is private by default, so real client documents cannot be
+# committed by an untargeted `git add`.
+matters/*
+!matters/fixtures/
+!matters/format-probe/
+!matters/injection-probe/
+!matters/refusal-control/
+!matters/synthetic-counsel/
+!matters/thread-probe/
 run-config.json
 # ingest-made sidecars + manifest of the format probe: a fresh clone must re-convert
 matters/*/docs/**/.derived.json
@@ -15,3 +23,7 @@ matters/format-probe/docs/firm-uniform/notes.docx
 matters/*/audit/chat-history.txt
 # thread-probe: the index is rebuilt by ingest; the padded .eml is not committed either
 matters/thread-probe/index.json
+
+# Belt and braces: these stay ignored even if the allowlist above is edited wrong.
+matters/patent-counsel/
+matters/haystack-*/
