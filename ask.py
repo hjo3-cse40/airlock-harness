@@ -1657,6 +1657,194 @@ def verify_numbers(answer, source_text):
             warnings.append(f"UNVERIFIED NUMBER: {num}")
     return sorted(warnings)
 
+# A number check that only asks "is this figure somewhere in the retrieved set"
+# accepts a real figure copied off the WRONG source: "$19,500 [S8]" when 19,500 is
+# Firm Alpha's estimate in S2 and S8 is Firm Bravo's email. The answer key calls
+# that a fail, and nothing else in the harness looks for it. The check below scopes
+# each figure to the chunks its own sentence cited. It is built to stay silent: over
+# 1,451 recorded answers in the safe matters it fires 0 times. Every warning it can
+# emit is a figure that appears in NO chunk the sentence cited, that the answer
+# never cited correctly anywhere else, and that does live in another document.
+
+_NUM_RE = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
+_MONEY_SIGNS = "$₩€£"
+# A section marker immediately before a figure means the figure names a statute or
+# rule, not a quantity: "35 U.S.C. 101", "section 112", "37 C.F.R. 1.56". Those are
+# three and four digit numbers, they are not years, and in a patent-counsel matter
+# they are everywhere, so without this guard they would be the loudest false class.
+_SECTION_MARKER = re.compile(
+    r"(?:U\.?\s?S\.?\s?C\.?|C\.?\s?F\.?\s?R\.?|§§?|[Ss]ections?|[Rr]ules?"
+    r"|[Pp]aragraphs?|[Aa]rt\.?)\s*$")
+_ONES = {"zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+         "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+         "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+         "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
+         "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_SCALES = {"thousand": 1000, "million": 1000000, "billion": 1000000000}
+
+def _spelled_numbers(text):
+    """Figures a question wrote in words. A figure the user supplied is not a sourced
+    claim, so it must not be judged as one, and "nineteen thousand five hundred" has
+    to suppress 19,500 exactly as "19,500" would."""
+    out, cur, part, run = set(), 0, 0, False
+    for tok in re.findall(r"[a-z]+", (text or "").lower()):
+        if tok in _ONES:
+            part += _ONES[tok]; run = True
+        elif tok == "hundred":
+            part = (part or 1) * 100; run = True
+        elif tok in _SCALES:
+            cur += (part or 1) * _SCALES[tok]; part = 0; run = True
+        elif tok == "and" and run:
+            pass                                  # "one hundred and one"
+        else:
+            if run and (cur + part):
+                out.add(str(cur + part))
+            cur = part = 0; run = False
+    if run and (cur + part):
+        out.add(str(cur + part))
+    return out
+
+def _claim_units(text):
+    """One claim per sentence, list markers stripped. split_claims is not reused: it
+    is line-scoped, so a comparison line and a wrong-firm line would be judged
+    together, and it strips every leading digit, which would eat a bullet that opens
+    with a figure. The bracket split rule requires a digit before the bracket so a
+    tag like [INFERENCE] is not torn off its own sentence. Each unit is returned with
+    the LINE it came from, because two guards are properties of the line and not of
+    the sentence: an abbreviation period tears "35 U.S.C. 101" into two units, and a
+    model writes [INFERENCE] once at the end of a multi-sentence line."""
+    units = []
+    for raw in text.splitlines():
+        line = re.sub(r"^\s*(?:[-*+•]\s*)*(?:\d+[.)]\s+)?", "", raw).strip()
+        if line:
+            units += [(line, u) for u
+                      in re.split(r"(?<=[.!?])\s+|(?<=\d\])\s+(?=[A-Z])", line) if u.strip()]
+    return units
+
+def _figures(unit, line=None):
+    """Numbers worth citation-checking. A figure needs three or more digits: shorter
+    ones are counts, ordinals and claim numbers, and once commas are stripped they
+    sit inside larger figures ("15" inside 1,150), so checking them would bury a real
+    mis-citation in noise. A currency symbol does not rescue a short number, for the
+    same reason. A bare year belongs to the sentence, not to a source, so it is
+    dropped unless it is written as money. The section-marker lookback runs over the
+    whole LINE, because sentence splitting cuts "35 U.S.C. 101" after "U.S.C." and a
+    lookback inside the tail fragment would never see the marker it exists for."""
+    out = set()
+    base = line if line is not None else unit
+    off = base.find(unit)
+    if off < 0:
+        off = 0                                   # defensive: fall back to unit-local offsets
+    for m in _NUM_RE.finditer(unit):
+        num = m.group(0)
+        if len(re.sub(r"[.,]", "", num)) < 3:
+            continue
+        pos = off + m.start()
+        if _SECTION_MARKER.search(base[max(0, pos - 40):pos]):
+            continue                              # "35 U.S.C. 101" is not a quantity
+        if (re.fullmatch(r"(?:19|20)\d\d", num)
+                and not any(s in unit[max(0, m.start() - 2):m.start()] for s in _MONEY_SIGNS)):
+            continue
+        out.add(num)
+    return out
+
+def _has_number(text, bare):
+    """Digit-boundary match. A plain substring test makes 4800 match inside 14800,
+    and 150 inside a comma-stripped 1,150, which invents mis-citations."""
+    return re.search(r"(?<!\d)" + re.escape(bare) + r"(?!\d)", text) is not None
+
+def _written_as_money(unit, bare):
+    return any(m.group(0).replace(",", "") == bare
+               and any(s in unit[max(0, m.start() - 2):m.start()] for s in _MONEY_SIGNS)
+               for m in _NUM_RE.finditer(unit))
+
+def _section_numbers(chunks):
+    """Figures the SOURCES present as statute or rule sections. A model writing "the
+    101 rejection" drops the marker, so the answer alone cannot tell 101 the statute
+    from 101 the amount. The sources can, and using them keeps this evidence-based
+    rather than a hard-coded list of patent sections."""
+    out = set()
+    for c in chunks:
+        t = sources_text([c])
+        for m in _NUM_RE.finditer(t):
+            if _SECTION_MARKER.search(t[max(0, m.start() - 40):m.start()]):
+                out.add(m.group(0).replace(",", ""))
+    return out
+
+def verify_number_citations(answer, chunks, question=None):
+    """Citation-scoped number check (dumb code, no AI). chunks are the retrieved
+    chunks in [S#] order. A figure in a sentence must appear in a chunk THAT sentence
+    cited; a figure that is real but lives in another document is MIS-CITED.
+
+    Seven deliberate silences, each measured, keep it from crying wolf. A figure
+    found nowhere is left to verify_numbers as UNVERIFIED, so the two checks never
+    both fire on one number. A figure found in another chunk of a CITED file is
+    ordinary heading chunking. A figure the question supplied, in digits or in words,
+    is not a sourced claim. An [INFERENCE] line is declared not-verbatim by the
+    reason-mode rules, so verbatim matching has no jurisdiction over it. A statute or
+    rule section is not a quantity. A figure the same answer already verified against
+    its own cited chunk is a back-reference, and a later sentence repeating it in a
+    comparison is prose: on the recorded corpus this class was 100 percent of what an
+    unguarded version flagged. And a sentence with one figure verified against a
+    chunk it cited is anchored to that citation: every OTHER figure in that sentence
+    is passed, comparison or not, because that is the shape ordinary prose takes.
+
+    The last two silences widen the known weak form: any second figure in an anchored
+    sentence is missed, and so is a wrong-firm repeat of a figure the answer cited
+    correctly elsewhere. A citation written at the START of a sentence is severed
+    from it by the split and is skipped too. That is the price of firing zero times
+    on the recorded corpus, and a warning nobody trusts is worse than no warning."""
+    norm = [sources_text([c]).replace(",", "") for c in chunks]   # same join verify_numbers uses
+    files = [c.get("file") or "" for c in chunks]
+    asked = set(_spelled_numbers(question))
+    for n in _NUM_RE.findall(question or ""):
+        n = n.replace(",", "")
+        asked.add(n)
+        if "." in n:
+            asked.add(n.rstrip("0").rstrip("."))  # "$19,500.00" asked suppresses 19,500
+    sections = _section_numbers(chunks)
+    units = _claim_units(answer)
+    # First pass: per unit, the figures that DO verify against a chunk that unit cited.
+    verified = []
+    for line, unit in units:
+        seen = [n for n in citation_labels(unit) if 1 <= n <= len(norm)]
+        figs = _figures(_CITE_GROUP.sub("", unit), _CITE_GROUP.sub("", line))
+        verified.append({b for b in (f.replace(",", "") for f in figs)
+                         if any(_has_number(norm[n - 1], b) for n in seen)})
+    ok_elsewhere = set().union(*verified) if verified else set()
+    warnings = []
+    for (line, unit), ok_here in zip(units, verified):
+        if "[INFERENCE]" in line.upper():
+            continue                     # a derived figure is not claimed to be verbatim
+        labels = sorted({n for n in citation_labels(unit) if 1 <= n <= len(norm)})
+        if not labels:
+            continue                     # uncited, or no valid label: not this check's job
+        cited_files = {files[n - 1] for n in labels}
+        for num in sorted(_figures(_CITE_GROUP.sub("", unit), _CITE_GROUP.sub("", line))):
+            bare = num.replace(",", "")
+            if bare in ok_here:
+                continue                 # verified against a chunk this sentence cited
+            if bare in asked or bare in ok_elsewhere:
+                continue                 # the question's figure, or a back-reference
+            if bare in sections and not _written_as_money(unit, bare):
+                continue                 # a statute or rule section number
+            if ok_here:
+                continue                 # anchored comparison: another figure here verified
+            found = [i for i, s in enumerate(norm) if _has_number(s, bare)]
+            if not found:
+                continue                 # nowhere at all: verify_numbers reports UNVERIFIED
+            if any(files[i] in cited_files for i in found):
+                continue                 # another chunk of a document this sentence cited
+            # The message says only what was established: the cited chunks do not hold
+            # the figure, and these other ones do. Two documents can share a figure by
+            # coincidence, so claiming the number was taken from the other document
+            # would be an accusation the check has not earned.
+            warnings.append(f"MIS-CITED NUMBER: {num} is cited to "
+                            + ", ".join("S%d" % n for n in labels)
+                            + ", which does not contain it (the same digits appear in "
+                            + ", ".join("S%d" % (i + 1) for i in found[:3]) + ")")
+    return sorted(set(warnings))
+
 # Attribution verbs: a claim of the form "<Name> <verb>" asserts that Name is the
 # source/speaker. The check confirms Name is actually a SENDER of a cited source
 # (or owns a cited non-email document), and warns when Name appears ONLY as a
@@ -2029,6 +2217,7 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
         warnings.append(f"TRUNCATED: the answer hit the {(gen or GEN)['max_tokens']:,}-token limit and may be cut; "
                         f"ask a narrower question, or use /summarize <file> for a whole-file summary")
     warnings += verify_numbers(answer, sources_text([c for _, _, c in hits]))
+    warnings += verify_number_citations(answer, [c for _, _, c in hits], question)
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     warnings += verify_citations(answer, len(hits))
     warnings += verify_negatives(answer, [(c["file"], c["heading"] or "", c["text"]) for _, _, c in hits])
@@ -2195,6 +2384,7 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
                 sys.stdout.write("\r\x1b[K")
         print()
     warnings = verify_numbers(answer, sources_text([c for _, _, c in hits]))
+    warnings += verify_number_citations(answer, [c for _, _, c in hits], query)
     warnings += verify_attribution(answer, [(c["file"], c["heading"] or "") for _, _, c in hits])
     warnings += verify_negatives(answer, [(c["file"], c["heading"] or "", c["text"]) for _, _, c in hits])
     warnings += verify_inference_labels(answer)
@@ -3649,6 +3839,7 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
         print()
     src_text = sources_text(selected)
     warnings = verify_numbers(summary, src_text)
+    warnings += verify_number_citations(summary, selected)
     warnings += verify_attribution(summary, [(c["file"], c["heading"] or "") for c in selected])
     warnings += verify_negatives(summary, [(c["file"], c["heading"] or "", c["text"]) for c in selected])
     warnings += verify_grounding(summary)
@@ -4317,6 +4508,105 @@ def selftest(min_score):
     check("grounding: number check still catches an invented figure in a summary",
           verify_numbers("- The total is $99,999 [S1].", "Alpha quoted 4800 and 12200.")
           == ["UNVERIFIED NUMBER: 99,999"])
+
+    # citation-scoped numbers: a real figure pinned to a source that does not hold it
+    def _q(text, heading, file):
+        return {"text": text, "heading": heading, "file": file}
+    quotes = [_q("Firm Alpha quoted $4,800 for the provisional.",
+                 "J. Morgan (Firm Alpha) -> TestCo", "firm-alpha/quote.md"),
+              _q("Firm Beta quoted $6,200 for the provisional.",
+                 "R. Lee (Firm Beta) -> TestCo", "firm-beta/quote.md")]
+    check("mis-cited number: Alpha's fee cited to Beta is flagged",
+          verify_number_citations("- Firm Beta quoted $4,800 [S2].", quotes)
+          == ["MIS-CITED NUMBER: 4,800 is cited to S2, which does not contain it"
+              " (the same digits appear in S1)"])
+    check("mis-cited number: a two-firm comparison citing both is not flagged",
+          verify_number_citations("- Alpha quoted $4,800 [S1] and Beta quoted $6,200 [S2].",
+                                  quotes) == [])
+    check("mis-cited number: an invented figure stays UNVERIFIED, not MIS-CITED",
+          verify_number_citations("- Firm Beta quoted $9,900 [S2].", quotes) == []
+          and verify_numbers("- Firm Beta quoted $9,900 [S2].", sources_text(quotes))
+          == ["UNVERIFIED NUMBER: 9,900"])
+    check("mis-cited number: an uncited sentence is left to the grounding check",
+          verify_number_citations("- Firm Beta quoted $4,800.", quotes) == [])
+    check("mis-cited number: a short figure is not matched inside a longer one",
+          verify_number_citations("- Beta offers a 15% discount [S2].",
+              [_q("Alpha: provisional $1,150; utility $12,200.", "Alpha fees", "a/fees.md"),
+               _q("Beta offers a fifteen percent discount.", "Beta -> TestCo", "b/mail.md")]) == []
+          and verify_number_citations("- Beta quoted $4,800 [S2].",
+              [_q("Alpha quoted $14,800.", "Alpha fees", "a/fees.md"),
+               _q("Beta quoted in words.", "Beta -> TestCo", "b/mail.md")]) == []
+          and verify_number_citations("- Beta plans 12 filings [S2].",
+              [_q("Alpha handled 12 matters.", "Alpha fees", "a/fees.md"),
+               _q("Beta plans a dozen filings.", "Beta -> TestCo", "b/mail.md")]) == [])
+    check("mis-cited number: a second chunk of the same document is not a mis-citation",
+          verify_number_citations("- Alpha's utility fee is $12,200 [S1].",
+              [_q("Provisional: $4,800.", "Fees", "alpha/fees.md"),
+               _q("Utility: $12,200.", "Fees", "alpha/fees.md")]) == []
+          and verify_number_citations("- Alpha charges $4,800 and $12,200 [S1].",
+              [_q("Provisional: $4,800.", "Fees", "alpha/fees.md"),
+               _q("Utility: $12,200.", "Fees", "alpha/fees.md")]) == [])
+    check("mis-cited number: a bare year and an [INFERENCE] line are both left alone",
+          verify_number_citations("- Beta replied in 2026 [S2].",
+              [_q("Filed 2026-03-02. Docket 41,203.", "2026-03-02 Alpha -> TestCo", "a.md"),
+               _q("We will respond shortly.", "Beta memo", "b.md")]) == []
+          and verify_number_citations(
+              "[INFERENCE] Alpha's $4,800 plus Beta's $6,200 is $11,000 [S1].", quotes) == []
+          and verify_number_citations(
+              "[INFERENCE] Beta's share works out to $6,200 [S1].", quotes) == []
+          and verify_number_citations(
+              "- Alpha's estimate misses the target by $4,800 [S2]. Only firm fees are"
+              " counted, not government fees [INFERENCE].", quotes) == [])
+    check("mis-cited number: a figure that lives only in a cited heading verifies",
+          verify_number_citations("- The cap is $75,000 [S1].",
+              [_q("The cap applies per matter.", "Aggregate fee cap of $75,000", "cap.md"),
+               _q("Alpha quoted $75,000 elsewhere.", "Alpha fees", "a/fees.md")]) == [])
+    # the three classes the recorded corpus actually produced, all false alarms
+    check("mis-cited number: a back-reference the answer already cited correctly is silent",
+          verify_number_citations(
+              "- Alpha's lifetime estimate is $19,500 [S1].\n"
+              "- That $19,500 still exceeds the budget, so utility work is pending [S2].",
+              [_q("Firm Alpha: all-in estimate $19,500 per patent.", "Alpha fees", "a/f.md"),
+               _q("Firm Bravo: utility work is pending.", "Bravo email", "b/e.md")]) == []
+          and verify_number_citations(
+              "- Alpha's lifetime estimate is $19,500 [S1].\n"
+              "- Bravo's fee of $6,100 is closer than Alpha's $19,500, but utility is pending [S2].",
+              [_q("Firm Alpha: all-in estimate $19,500 per patent.", "Alpha fees", "a/f.md"),
+               _q("Firm Bravo: flat $6,100 provisional.", "Bravo email", "b/e.md")]) == [])
+    check("mis-cited number: a comparison anchored by its own verified figure is silent",
+          verify_number_citations("- Bravo quoted $6,200, which is more than Alpha's $4,800 [S2].",
+              [_q("Alpha quoted $4,800.", "Alpha", "a.md"),
+               _q("Bravo quoted $6,200.", "Bravo", "b.md")]) == [])
+    check("mis-cited number: a section marker in the answer marks a statute, not a figure",
+          verify_number_citations("- Bravo will address the § 112 issue [S2].",
+              [_q("The 112 issue is open.", "Alpha memo", "a/memo.md"),
+               _q("Bravo will respond.", "Bravo email", "b/mail.md")]) == []
+          and verify_number_citations(
+              "- Bravo will respond to the rejection under 35 U.S.C. 101 [S2].",
+              [_q("The examiner raised the 101 rejection in March.", "Alpha memo", "a/memo.md"),
+               _q("Bravo will handle the office action.", "Bravo email", "b/mail.md")]) == []
+          and verify_number_citations("- Discovery under Fed. R. Civ. P. 26 applies [S2].",
+              [_q("Alpha logged 126 pages of discovery.", "Alpha memo", "a/memo.md"),
+               _q("Bravo agrees to the schedule.", "Bravo email", "b/mail.md")]) == [])
+    check("mis-cited number: a statute section is not a quantity, but $101 still is",
+          verify_number_citations("- Bravo will respond to the 101 rejection [S2].",
+              [_q("The examiner raised a rejection under 35 U.S.C. 101.", "Alpha memo", "a/memo.md"),
+               _q("Bravo will handle the office action response.", "Bravo email", "b/mail.md")]) == []
+          and verify_number_citations("- Bravo charges $101 per page [S2].",
+              [_q("A rejection under 35 U.S.C. 101. Alpha charges $101 per page.", "Memo", "a.md"),
+               _q("Bravo bills hourly.", "Bravo", "b.md")])
+          == ["MIS-CITED NUMBER: 101 is cited to S2, which does not contain it"
+              " (the same digits appear in S1)"])
+    check("mis-cited number: a figure the question spelled out in words is not a claim",
+          verify_number_citations("- Bravo did not match the 19,500 figure [S2].",
+              [_q("Alpha quoted 19,500.", "Alpha", "a.md"),
+               _q("Bravo replied separately.", "Bravo", "b.md")],
+              question="Which firm comes closest to nineteen thousand five hundred?") == []
+          and _spelled_numbers("about nineteen thousand five hundred") == {"19500"}
+          and verify_number_citations("- Bravo did not match the 19,500 figure [S2].",
+              [_q("Alpha quoted 19,500.", "Alpha", "a.md"),
+               _q("Bravo replied separately.", "Bravo", "b.md")],
+              question="Who is nearest $19,500.00?") == [])
     check("cap_citations: a spammy citation run is trimmed to three",
           cap_citations("- A process is followed [S2][S4][S6][S9][S12].")
           == "- A process is followed [S2][S4][S6].")
