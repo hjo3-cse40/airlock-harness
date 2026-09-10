@@ -324,7 +324,8 @@ boundary: not retrieval, not the index, not the audit log, not the history.
   the refusal gate, the number and attribution checks, the document parsers,
   coverage and conversion rules, the chat dispatcher, the menu, the line
   editor driven by injected keys, and the reason-mode request shape. No terminal or model is needed; when a server
-  is up, one live question runs at the end.
+  is up, one live question runs at the end and its answer is checked for
+  content, so a server that fails mid-stream fails the suite.
 - `matters/synthetic-counsel/test-questions.txt` is a 40-question benchmark
   with `ANSWER-KEY.md`. Run it with `batch` and score by hand against the key.
 - `matters/format-probe/test-questions.txt` asks one question per document
@@ -343,30 +344,37 @@ boundary: not retrieval, not the index, not the audit log, not the history.
   prompt-injection probe, a refusal-precision probe, and the summarization
   faithfulness eval (`eval_summary.py`).
 
-## Known limitation: a failed model call looks like a silent answer
+## A failed model call fails loudly
 
-If the local server accepts a request and then fails mid-stream, the harness
-does not notice. LM Studio returns HTTP 200 with an SSE frame `event: error`,
-and `generate()` reads only `data:` lines, so it returns an empty string.
-Nothing raises.
+A local server can accept a request and then fail mid-stream. LM Studio reports
+that in-band: the status is already 200 and the body carries an SSE frame
+`event: error`, so the HTTP layer never raises.
 
-The visible symptoms are an empty answer under a normal answer rule,
-`context: usage not reported by the server`, and a batch summary that reads
-`answered 40 | errors 0`. `selftest` prints PASSED, because its one live
-question is not checked for content.
+`generate()` reads the `event:` line, and raises `ModelError` on an error frame,
+on a top-level `error` key, or when a stream ends with no tokens, no usage and
+no finish reason. `ModelError` subclasses `OSError`, so a caller that already
+caught a transport error catches this too. A failed call can never be returned
+as an empty answer.
 
-This was reproduced on 2026-09-09 with speculative decoding enabled against an
-MTP draft model: three 40-question batches produced 120 audit lines claiming
-success with an empty answer. Those lines now carry an `error` field.
+When it fires:
 
-Until this is fixed: if answers come back empty, probe the server directly
-rather than trusting the summary.
+- the audit line is written before the error propagates, carrying an `error`
+  field and the retrieval evidence, so a failed question leaves a record
+  instead of leaving none at all
+- `batch` counts it under `errors`, never under `answered`
+- `selftest` fails, exit 1
+- `summarize --out` refuses to write an empty file
 
-```
-curl -s http://127.0.0.1:1234/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"<id>","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":20}'
-```
+Why it is written down here: on 2026-09-09 the old behaviour produced three
+40-question batches reported as `answered 40 | errors 0`, 120 audit lines
+claiming success with an empty answer, and a `selftest` that printed PASSED
+with a blank live answer. The trigger was speculative decoding against an MTP
+draft model, which LM Studio would only load through the plain draft-model
+path. Those 120 lines carry an `error` field and are excluded from scoring.
+
+The regression tests hard-code that exact SSE frame, so the coverage does not
+depend on being able to reproduce the server fault again.
+
 
 ## Benchmarks
 
