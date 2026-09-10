@@ -199,8 +199,9 @@ Each question runs through a fixed pipeline:
    questions, the more expensive mistake.
 3. **Grounded generation.** The model answers from numbered source chunks via
    any OpenAI-compatible local server (built against LM Studio). Decoding is
-   greedy (temperature 0), so identical inputs give identical outputs and the
-   audit trail is reproducible.
+   greedy (temperature 0), so a run carries no sampling noise and the audit
+   trail records what was asked, what was retrieved and what came back. Greedy
+   decoding is not the same as byte-identical output: see Reproducibility below.
 4. **Deterministic checks.** A number not in a cited source is flagged
    `UNVERIFIED NUMBER`. A statement attributed to a party who is only a
    recipient of the cited sources is flagged `UNVERIFIED ATTRIBUTION`. In a
@@ -314,8 +315,16 @@ from a diverse subset and the coverage gap is reported, never hidden.
 - **Coverage is checked.** A file that never got indexed is a silent failure.
   `coverage` diffs the document folder against the index and warns loudly, and
   ingest converts what it can with local tools before it indexes.
-- **Reproducible by default.** Greedy decoding lets a run be rerun and compared
-  without sampling noise.
+- **Reproducible at the level of facts, not bytes.** Greedy decoding removes
+  sampling noise, and repeated runs give the same figures, the same citations
+  and the same refusals. They do not always give the same bytes. Measured on
+  2026-09-10: five consecutive 40-question batches, one model, one server, one
+  code path, produced three distinct outputs. Every dollar figure was identical
+  and all ten refusals were identical; what moved was wording ("so they do not
+  publish" against "; therefore, they do not publish") and citation grouping
+  ("[S1], [S2]" against "[S1, S2]"). Reloading the model shifts the wording too.
+  So compare two runs on their facts and citations. A byte-for-byte gate will
+  report a difference that is not there.
 - **No real data in this repo. Ever.** Only synthetic corpora and synthetic
   results are published here.
 
@@ -421,7 +430,9 @@ depend on being able to reproduce the server fault again.
 - **Summarization.** A separate faithfulness eval scores each summary for
   grounding rate, fabricated numbers (found nowhere in the corpus), and
   attribution errors. Across four scopes: 98 cited claims, 100% grounded, zero
-  fabricated, zero attribution errors, and byte-identical across temp-0 runs.
+  fabricated, zero attribution errors. An earlier version of this line claimed
+  the runs were byte-identical; that was true of the runs measured and is not a
+  property of the system, so it has been withdrawn. See Reproducibility.
 
 ## Status
 
