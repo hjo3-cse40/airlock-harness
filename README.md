@@ -342,12 +342,42 @@ boundary: not retrieval, not the index, not the audit log, not the history.
   prompt-injection probe, a refusal-precision probe, and the summarization
   faithfulness eval (`eval_summary.py`).
 
+## Known limitation: a failed model call looks like a silent answer
+
+If the local server accepts a request and then fails mid-stream, the harness
+does not notice. LM Studio returns HTTP 200 with an SSE frame `event: error`,
+and `generate()` reads only `data:` lines, so it returns an empty string.
+Nothing raises.
+
+The visible symptoms are an empty answer under a normal answer rule,
+`context: usage not reported by the server`, and a batch summary that reads
+`answered 40 | errors 0`. `selftest` prints PASSED, because its one live
+question is not checked for content.
+
+This was reproduced on 2026-09-09 with speculative decoding enabled against an
+MTP draft model: three 40-question batches produced 120 audit lines claiming
+success with an empty answer. Those lines now carry an `error` field.
+
+Until this is fixed: if answers come back empty, probe the server directly
+rather than trusting the summary.
+
+```
+curl -s http://127.0.0.1:1234/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"<id>","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":20}'
+```
+
 ## Benchmarks
 
 - **Extraction.** On the synthetic 40-question set with known ground truth,
   accuracy improved from 45% to ~98% across harness iterations, with zero
-  fabricated numbers and zero wrong citations in every run. Under overload the
-  system degrades to silence, not to lies.
+  fabricated numbers in every run. Under overload the system degrades to
+  silence, not to lies. Two caveats, both from a review on 2026-09-09:
+  citation correctness is scored by hand and is not enforced by any check
+  (the number check verifies a number against every retrieved chunk, not
+  against the chunk it was cited to), and the false-refusal rate is not yet
+  measured, though the design principles below call for it. The set is now
+  saturated, so it can catch a regression but cannot rank two current models.
 - **Summarization.** A separate faithfulness eval scores each summary for
   grounding rate, fabricated numbers (found nowhere in the corpus), and
   attribution errors. Across four scopes: 98 cited claims, 100% grounded, zero
