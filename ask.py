@@ -1440,6 +1440,11 @@ NO_THINKING = {"reasoning_effort": "none"}   # the only per-request switch Qwen3
 class StopGeneration(Exception):
     """Raised from an on_think callback to abandon a run (the trace is looping)."""
 
+class ModelError(OSError):
+    """The server accepted the request and then failed to produce an answer.
+    Subclasses OSError so every caller that already catches a transport error
+    catches this too: a failed generation must never look like an empty answer."""
+
 def looks_stuck(text, span=300, times=3):
     """True when the tail of a thinking trace is a verbatim cycle: the last
     `span` characters occur `times` or more times in the recent window. Dumb
@@ -1448,6 +1453,25 @@ def looks_stuck(text, span=300, times=3):
         return False
     tail = text[-span:]
     return text[-span * times * 4:].count(tail) >= times
+
+def sse_error_text(obj):
+    """The human-readable message out of an error frame, whatever its shape."""
+    err = obj.get("error")
+    if isinstance(err, dict):
+        return str(err.get("message") or err)
+    return str(err or obj.get("message") or obj)
+
+def log_model_error(matter, audit, err, model, t0, config, quiet=False):
+    """Write the audit line for a generation that failed, then let the caller
+    re-raise. Without this a failed question leaves no trace at all: the audit
+    dict is built before the call and discarded when it raises."""
+    audit.update({"refused": False, "answer": "", "warnings": [], "model": model,
+                  "error": str(err), "latency_s": round(time.time() - t0, 1),
+                  "usage": None, "config": config})
+    _log(matter, audit)
+    if not quiet:
+        print("\n" + warn_line(f"MODEL ERROR: {err}"))
+    return audit
 
 def build_payload(system, user, model, gen=None, thinking=False):
     """The chat/completions body. Extraction and summary calls always send
@@ -1475,10 +1499,14 @@ def generate(system, user, model, on_token=None, gen=None, thinking=False, on_th
                                  json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"})
     parts, thoughts, usage, finish = [], [], None, None
+    event = None
     try:
         with urllib.request.urlopen(req, timeout=900 if thinking else 300) as r:
             for raw in r:
                 line = raw.decode("utf-8", "replace").strip()
+                if line.startswith("event:"):
+                    event = line[len("event:"):].strip()
+                    continue
                 if not line.startswith("data:"):
                     continue
                 data = line[len("data:"):].strip()
@@ -1488,6 +1516,10 @@ def generate(system, user, model, on_token=None, gen=None, thinking=False, on_th
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+                # LM Studio reports a mid-stream failure in-band: the status is
+                # already 200, so urlopen never raises. Read it and raise here.
+                if event == "error" or "error" in obj:
+                    raise ModelError(f"{model}: {sse_error_text(obj)}")
                 if obj.get("usage"):
                     usage = obj["usage"]
                 ch = obj.get("choices") or []
@@ -1507,6 +1539,9 @@ def generate(system, user, model, on_token=None, gen=None, thinking=False, on_th
                         on_token(tok)
     except StopGeneration:
         finish = "loop"   # leaving the with-block closes the response; LM Studio stops generating
+    if finish is None and not parts and not thoughts and usage is None:
+        raise ModelError(f"{model}: the server closed the stream with no tokens, "
+                         "no usage and no finish_reason")
     meta = {"reasoning": "".join(thoughts).strip(), "finish": finish}
     return "".join(parts).strip(), usage, meta
 
@@ -1791,7 +1826,12 @@ def ask(matter, question, top_k, min_score, quiet=False, only=None, batch=None, 
         rend = AnswerRenderer()
         on_token = rend.feed
     gen = {**GEN, "max_tokens": GATHER_MAX_TOKENS} if gathered else None   # a whole-message read may need a longer answer
-    answer, usage, meta = generate(system, user, model, on_token, gen=gen)
+    try:
+        answer, usage, meta = generate(system, user, model, on_token, gen=gen)
+    except ModelError as e:
+        log_model_error(matter, audit, e, model, t0,
+                        run_config(chat_model, emb_model, top_k, min_score, dense_min, diverse), quiet)
+        raise
     if not quiet:
         rend.close()
         print()  # end the streamed line
@@ -1949,8 +1989,12 @@ def reason(matter, question, top_k, min_score, quiet=False, only=None, batch=Non
             if count[0]:
                 end_thinking()
             rend.feed(t)
-    answer, usage, meta = generate(system, user, chat_model, on_token,
-                                   gen=gen, thinking=True, on_think=on_think)
+    try:
+        answer, usage, meta = generate(system, user, chat_model, on_token,
+                                       gen=gen, thinking=True, on_think=on_think)
+    except ModelError as e:
+        log_model_error(matter, audit, e, chat_model, t0, config, quiet)
+        raise
     if not quiet:
         rend.close()
         if not answer and count[0]:          # the trace ended without an answer (loop, cap)
@@ -2073,6 +2117,10 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
         print(f"\n{head} {q}")
         try:
             a = ask(matter, q, tk, min_score, only=only, batch=tag, dense_min=dense_min, diverse=dv, head=False)
+        except ModelError as e:
+            n_err += 1
+            print(warn_line(f"MODEL ERROR, question skipped: {e}"))
+            continue
         except (urllib.error.URLError, OSError) as e:
             n_err += 1
             print(f"!!  ERROR, question skipped: {e}")
@@ -2082,6 +2130,11 @@ def batch(matter, path, top_k, min_score, dense_min=0.5, diverse=False):
             n_gate += 1
         elif is_refusal_text(ans):
             n_model_ref += 1
+        elif not ans:
+            # unreachable once generate() raises, and kept anyway: the summary
+            # must never report a blank body as an answer
+            n_err += 1
+            print(warn_line("EMPTY ANSWER: the model returned no text"))
         else:
             n_ans += 1
         n_warn += len(a.get("warnings") or [])
@@ -3386,8 +3439,15 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
         rend = AnswerRenderer()
         on_token = rend.feed
     t0 = time.time()
-    summary, usage, _ = generate(SUMMARY_SYSTEM, user, chat_model, on_token,
-                                 gen={**GEN, "max_tokens": 1800})
+    try:
+        summary, usage, _ = generate(SUMMARY_SYSTEM, user, chat_model, on_token,
+                                     gen={**GEN, "max_tokens": 1800})
+    except ModelError as e:
+        log_model_error(matter, {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "matter": matter,
+                                 "question": f"[summarize {only or 'all'}]", "only": only,
+                                 "batch": "summarize"}, e, chat_model, t0,
+                        run_config(chat_model, emb_model, len(selected), 0.0, dense_min, False), quiet)
+        raise
     summary = cap_citations(summary)
     if not quiet:
         rend.close()
@@ -3411,7 +3471,9 @@ def summarize(matter, only=None, dense_min=0.5, out=None, quiet=False):
         for w in warnings:
             print(warn_line(w))
         print(context_line(usage) + "\n")
-    if out:
+    if out and not summary.strip():
+        print(warn_line(f"NOT WRITTEN: the summary is empty, so {out} was left alone"))
+    elif out:
         with open(out, "w", encoding="utf-8") as f:
             f.write(summary + "\n\n--- Sources ---\n")
             for i, c in enumerate(selected, 1):
@@ -4148,11 +4210,53 @@ def selftest(min_score):
     check("generate: a verbatim thinking cycle is abandoned early with finish='loop' and no answer",
           meta["finish"] == "loop" and ans == "" and len(seen) < 400 and "Wait" in meta["reasoning"])
 
+    # generate(): an in-band SSE error frame must raise, not return "". This is the
+    # exact frame LM Studio sends when speculative decoding fails (2026-09-09).
+    spec_err = ('{"error":{"message":"Engine protocol predict stream returned an error: '
+               '{\\"code\\":500,\\"message\\":\\"decode() failed: failed to process '
+               'speculative batch\\",\\"type\\":\\"server_error\\"}"},'
+               '"message":"Engine protocol predict stream returned an error"}')
+    err_lines = [b"event: error\n", ("data: " + spec_err + "\n").encode()]
+    def _generate_with(lines):
+        real = urllib.request.urlopen
+        try:
+            urllib.request.urlopen = lambda req, timeout=None: _FakeResp(lines)
+            return generate("s", "u", "m")
+        finally:
+            urllib.request.urlopen = real
+    raised = None
+    try:
+        _generate_with(err_lines)
+    except ModelError as e:
+        raised = str(e)
+    check("generate: an SSE 'event: error' frame raises ModelError naming the cause, never returns ''",
+          raised is not None and "speculative batch" in raised)
+    check("generate: ModelError is an OSError, so callers that catch a transport error catch it",
+          issubclass(ModelError, OSError))
+    raised2 = None
+    try:
+        _generate_with([])
+    except ModelError as e:
+        raised2 = str(e)
+    check("generate: a stream that ends with no tokens, no usage and no finish_reason raises",
+          raised2 is not None and "no tokens" in raised2)
+    # a normal stream must still return normally
+    ok_lines = [_sse({"content": "hi"}, "stop"), b"data: [DONE]\n"]
+    a_ok, _, m_ok = _generate_with(ok_lines)
+    check("generate: a normal stream is unaffected by the new guards",
+          a_ok == "hi" and m_ok["finish"] == "stop")
+
     model, emb = server_models()
     if model:
         print(f"\nLM Studio server up (model: {model}, embeddings: {emb or 'none'}). Live test:")
         print("Q: What is the maximum thermal budget after metal-1?\n")
-        ask("fixtures", "What is the maximum thermal budget after metal-1?", 5, min_score)
+        try:
+            live = ask("fixtures", "What is the maximum thermal budget after metal-1?", 5, min_score)
+            check("live: the model returned a non-empty answer with usage reported",
+                  bool((live.get("answer") or "").strip()) and live.get("usage"))
+        except ModelError as e:
+            ok = False
+            print(warn_line(f"live: the model call FAILED: {e}"))
         print("\nQ (must refuse): What is the metal-1 CD in the shipment note?  -- skipped, run by hand if wanted")
     else:
         print("\nLM Studio server offline - live test skipped. (Developer tab > Start Server)")
