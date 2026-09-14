@@ -1,9 +1,9 @@
 {
- "built": "2026-09-10 14:05:18",
+ "built": "2026-09-14 14:05:42",
  "chunk_version": 8,
  "embed_model": "text-embedding-nomic-embed-text-v1.5@q8_0",
  "files": {
-  "chain.eml": "011f3b55cba42a13c69ac14e753f3f74c079f4db1e981ec6c1652bf5022e5a1b",
+  "chain.eml": "52588be2236abe6928a0836634b89d4c97ef5fe93fd5ab1c66dcb5df6e32cf36",
   "grid-order.pptx": "c06814748893f1e78c2bb37a04dc5de9851f92551e0e1038e7b652a8910ab438",
   "por-revC.md": "143c5360bf82a7a2e769c20eda390b1504a83e66fabd6bdff848c1f09ce6bc7a",
   "styles.docx": "20304536d17ffd6445338207b4b4672b2a0e2a49c802d400e0196d08563bb671",
