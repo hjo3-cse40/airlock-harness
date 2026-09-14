@@ -341,6 +341,8 @@ boundary: not retrieval, not the index, not the audit log, not the history.
     ├── prompt.txt             # grounding rules for the model (ask, extraction)
     ├── reason-prompt.txt      # rules for reason mode (compute, label inferences)
     ├── eval_summary.py        # faithfulness eval for the summarize mode
+    ├── make_counsel2.py       # build the counsel-2 benchmark matter from source.json
+    ├── eval_counsel2.py       # CORRECT / SILENT / WRONG scorer for counsel-2
     ├── make_haystack.py       # generate a needle-in-a-haystack test corpus
     ├── make_fixture_docs.py   # build the .docx/.eml fixtures and the format probe
     └── matters/
@@ -369,6 +371,20 @@ boundary: not retrieval, not the index, not the audit log, not the history.
   content, so a server that fails mid-stream fails the suite.
 - `matters/synthetic-counsel/test-questions.txt` is a 40-question benchmark
   with `ANSWER-KEY.md`. Run it with `batch` and score by hand against the key.
+  It is saturated: it catches a regression, but it cannot rank two current
+  models. `counsel-2` replaced it for that job.
+- `counsel-2` is the current benchmark: 126 synthetic items over a generated
+  corpus, scored three ways as CORRECT / SILENT / WRONG, so a refusal and a
+  fabrication are never averaged together. Build it with
+  `python3 make_counsel2.py` (every currency amount in a rendered body is a
+  placeholder, and build check B1 refuses to write the corpus if a literal
+  amount or an unknown date appears), run `make_counsel2.py check` for the
+  structural suite S1-S6, then score with `python3 eval_counsel2.py`.
+  `--compare` runs an exact McNemar test between two models on the same key.
+  Items are grouped into classes (supersede, dyad, absence, attribution,
+  conditional, paraphrase, aggregate, buried); 20 are held back as a sealed
+  block. The corpus, key and per-run results are not committed here, because
+  a published key stops measuring anything.
 - `matters/format-probe/test-questions.txt` asks one question per document
   format, with its own answer key, and one trap that must be refused.
 - `matters/thread-probe/` is a self-forwarded email chain whose second message
@@ -422,14 +438,34 @@ depend on being able to reproduce the server fault again.
 - **Extraction.** On the synthetic 40-question set with known ground truth,
   accuracy improved from 45% to ~98% across harness iterations, with zero
   fabricated numbers in every run. Under overload the system degrades to
-  silence, not to lies. Two caveats, both from a review on 2026-09-09:
-  citation correctness is scored by hand and is not enforced by any check
-  (the number check verifies a number against every retrieved chunk, not
-  against the chunk it was cited to), and the false-refusal rate is measured
-  only for the pre-model gate (5 false refusals in 7 firings over 1,376 clean
-  runs, see the design principles above), never for the refusals the model
-  itself writes. The set is now
+  silence, not to lies. One caveat from the review on 2026-09-09 stands: the
+  false-refusal rate is measured only for the pre-model gate (5 false refusals
+  in 7 firings over 1,376 clean runs, see the design principles above), never
+  for the refusals the model itself writes. The other caveat is closed: the
+  number check is now citation-scoped, so a figure must appear in the chunk its
+  own sentence cited, not merely somewhere in the retrieval. The set is now
   saturated, so it can catch a regression but cannot rank two current models.
+- **Ranking (counsel-2, 2026-09-10).** 126 items, one key, one index, one
+  machine, greedy decoding, thinking off. Four local models, scored
+  CORRECT / SILENT / WRONG on the 101 public items:
+
+  | model | quant | C / S / W | silent-wrong |
+  |---|---|---|---|
+  | Gemma 4 12B | Q4 QAT | 63 / 33 / 5 | 5.0% |
+  | Qwen3-14B | Q5_K_M | 62 / 33 / 6 | 5.9% |
+  | Qwen3.5-9B | Q5_K_M | 62 / 31 / 8 | 7.9% |
+  | Qwen3-8B | Q5_K_M | 54 / 31 / 16 | 13.9% |
+
+  Exact McNemar over the paired items: the top three are indistinguishable at
+  N = 101 (every pairwise p between 0.51 and 1.00). Qwen3-8B is separated, and
+  loses on WRONG to Gemma 4 12B at p = 0.007 and to Qwen3-14B at p = 0.013.
+  The reading is that a three-way tie at the top is a statement about the
+  instrument, not a statement that the models are equal; the one clear result
+  is that the 8B fabricates about three times as often as the others, and that
+  is the number a cite-or-refuse system is built to keep low. Two items defeat
+  every model (a bare follow-up with no noun, and a question that asks for a
+  minimum where the corpus recites caps), and 29 of 101 are correct for no
+  model, mostly descriptor and aggregate retrieval shapes.
 - **Summarization.** A separate faithfulness eval scores each summary for
   grounding rate, fabricated numbers (found nowhere in the corpus), and
   attribution errors. Across four scopes: 98 cited claims, 100% grounded, zero
@@ -442,6 +478,10 @@ depend on being able to reproduce the server fault again.
 v0, active development. Greedy decoding, source-diverse retrieval, a chat
 prompt with slash commands and folder scoping, native Word and email parsing
 with local-tool conversion for the rest, an attribution check, and a two-stage
-`summarize` mode with a grounding check have landed. Sources are walled off as
+`summarize` mode with a grounding check have landed. The number check is
+citation-scoped, forged citations and unprovable negatives are detected, a
+dropped .docx part is reported rather than silently skipped, `--only` requires
+a folder boundary, and a failed model call raises instead of returning an empty
+answer. Sources are walled off as
 untrusted text, so planted instructions inside a document are ignored, not
 obeyed. Per-run notes live under each matter's `results/`.
